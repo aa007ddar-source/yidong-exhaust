@@ -1,0 +1,19 @@
+// Cloudflare Workers 設定：推送到 main 後由 Workers Builds 自動部署
+{
+  "name": "yidong-exhaust",
+  "main": "_worker.js",
+  "compatibility_date": "2026-10-01",
+  // 靜態檔案（頁面、族譜資料、核准截圖）
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  // 共用的資料庫（送氣、排程、會勘紀錄、圖檔…），與舊網址 exhaust-query.pages.dev 為同一份
+  "kv_namespaces": [
+    { "binding": "DB", "id": "4413e08092274d558a131efb65edb9ee" }
+  ],
+  // 核准截圖 AI 辨識
+  "ai": { "binding": "AI" }
+  // 編輯密碼 EDIT_PASSWORD 請在 Cloudflare 後台「設定 → 變數和機密」以「機密」新增，不要寫在這裡
+}
