@@ -3,6 +3,8 @@
   "name": "yidong-exhaust",
   "main": "_worker.js",
   "compatibility_date": "2026-10-01",
+  // 保留在 Cloudflare 後台設定的變數（例如編輯密碼），自動部署時不要清掉
+  "keep_vars": true,
   // 靜態檔案（頁面、族譜資料、核准截圖）
   "assets": {
     "directory": "./public",
