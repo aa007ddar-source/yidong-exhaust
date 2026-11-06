@@ -36,6 +36,10 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 header.top .wrap{padding-block:14px 12px;display:grid;gap:10px}
 .brand{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
 .brand .grow{flex:1}
+.plants{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;align-self:center}
+.plants button{border:0;border-right:1px solid var(--line);background:var(--surface);color:var(--fg);padding:6px 14px;font:600 .9rem var(--sans);cursor:pointer}
+.plants button:last-child{border-right:0}
+.plants button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
 h1{font-size:1.25rem;font-weight:600;margin:0;letter-spacing:.02em}
 .src{color:var(--muted);font-size:.8rem}
 .searchrow{display:flex;gap:8px;flex-wrap:wrap}
@@ -264,6 +268,10 @@ details.raw pre{white-space:pre-wrap;font:.76rem/1.5 var(--mono);background:var(
   <div class="wrap">
     <div class="brand">
       <h1>毅東工程 Exhaust</h1>
+      <div class="plants" role="group" aria-label="切換廠區">
+        <button type="button" data-plant="F16">后里 F16</button>
+        <button type="button" data-plant="TL">銅鑼廠</button>
+      </div>
       <span class="src" id="srcline">載入中…</span>
       <span class="grow"></span>
       <button type="button" class="btn small" id="editBtn">編輯</button>
@@ -281,10 +289,8 @@ details.raw pre{white-space:pre-wrap;font:.76rem/1.5 var(--mono);background:var(
       <button type="button" class="btn" id="qClear" hidden>✕ 清除</button>
     </div>
     <div class="filters" role="group" aria-label="篩選">
-      <button type="button" data-area="all" aria-pressed="true">全部廠區</button>
-      <button type="button" data-area="A1" aria-pressed="false">A1</button>
-      <button type="button" data-area="A2" aria-pressed="false">A2</button>
-      <button type="button" data-area="A3" aria-pressed="false">A3</button>
+      <button type="button" data-area="all" aria-pressed="true">全部棟別</button>
+      <span id="areaBtns" style="display:contents"></span>
       <span class="fsep" aria-hidden="true"></span>
       <button type="button" data-f="all" aria-pressed="true">全部</button>
       <button type="button" data-f="build" aria-pressed="false">裝機中</button>
@@ -339,9 +345,20 @@ details.raw pre{white-space:pre-wrap;font:.76rem/1.5 var(--mono);background:var(
 
 <script src="core.js"></script>
 <script>
+// ── 廠區：后里 F16（原本的資料）／銅鑼廠（TL）。每個廠的資料完全分開。
+const PLANTS={F16:'后里 F16',TL:'銅鑼廠'};
+const PLANT=(()=>{let p=new URLSearchParams(location.search).get('plant');if(!p){try{p=localStorage.getItem('exq-plant')}catch(e){}}p=String(p||'F16').toUpperCase();return p in PLANTS?p:'F16'})();
+try{localStorage.setItem('exq-plant',PLANT)}catch(e){}
+const PQ=PLANT==='F16'?'':'?p='+PLANT; // 給 <img>、連結用（沒辦法帶標頭）
+(()=>{const _f=window.fetch.bind(window);window.fetch=(u,o={})=>{const s=String(u&&u.url||u);
+  if(/^\/?api\//.test(s)||s.startsWith(location.origin+'/api/')){const h=new Headers(o.headers||{});h.set('x-plant',PLANT);o={...o,headers:h}}return _f(u,o)}})();
+document.title=`毅東工程 Exhaust · ${PLANTS[PLANT]}`;
+document.querySelectorAll('[data-plant]').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.plant===PLANT));
+  b.addEventListener('click',()=>{if(b.dataset.plant===PLANT)return;try{localStorage.setItem('exq-plant',b.dataset.plant)}catch(e){}const u=new URL(location.href);u.searchParams.delete('plant');history.replaceState(null,'',u.pathname+u.search+u.hash);location.reload()})});
+const SKEY=PLANT==='F16'?'exq':'exq-'+PLANT;
 const LABEL={ok:'吻合',unreg:'族譜未登記此機台',missing:'族譜查無此點位',na:'不核對族譜'};
-const NOBOOK=new Set(['A3']); // 這些廠區不核對族譜
-const noBook=area=>NOBOOK.has((String(area||'').match(/^A\d/)||[''])[0]);
+const NOBOOK=new Set(['A3']); // 后里 F16 這些棟別不核對族譜；其他廠在還沒有族譜時一律不核對
+const noBook=area=>PLANT==='F16'?NOBOOK.has((String(area||'').match(/^A\d/)||[''])[0]):!(D.book&&D.book.length);
 const stat=(tool,area,pt,idx)=>noBook(area)?{s:'na',rows:[],ovr:null,how:''}:EXQ.status(tool,pt,idx,D.ovr);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=v=>v==null||v===''?'—':(+v).toString();
@@ -349,14 +366,14 @@ const norm=s=>String(s||'').toUpperCase().replace(/\s+/g,'');
 const $=id=>document.getElementById(id);
 let D={appr:[],book:[],ovr:{},meta:{}},I=null,EDIT=null,SERVER={};
 const state={q:'',f:'all',area:'all',old:false};
-try{const s=JSON.parse(localStorage.getItem('exq')||'{}');Object.assign(state,{q:s.q||'',f:['all','todo','gasyes','gasno'].includes(s.f)?s.f:'all',area:s.area||'all',old:!!s.old})}catch(e){}
+try{const s=JSON.parse(localStorage.getItem(SKEY)||'{}');Object.assign(state,{q:s.q||'',f:['all','todo','gasyes','gasno'].includes(s.f)?s.f:'all',area:s.area||'all',old:!!s.old})}catch(e){}
 try{EDIT=sessionStorage.getItem('exq-key')}catch(e){}
 $('q').value=state.q;
 
 async function load(){
   let data=null;
   try{const r=await fetch('api/data',{cache:'no-store'});if(r.ok){data=await r.json();SERVER=data}}catch(e){}
-  if(!data){try{data=await (await fetch('data.json')).json()}catch(e){}}
+  if(!data&&PLANT==='F16'){try{data=await (await fetch('data.json')).json()}catch(e){}}
   if(!data){$('out').innerHTML='<div class="empty">資料載入失敗，請重新整理頁面。</div>';return}
   D=data;prepare();
 }
@@ -378,15 +395,18 @@ function prepare(){
     a.gasBase=a.gas==='yes'||(a.p.length&&a.pgN===a.p.length)?'yes':'no';a.gasSt=a.gasBase;
   });
   const bm=D.meta&&D.meta.book||{};
-  const bd=['A1','A2'].map(k=>bm[k]?`${k} ${bm[k].date.slice(0,10)}`:'').filter(Boolean).join('、');
-  $('srcline').textContent=`核准 ${D.appr.length} 張 × A1／A2 Take off book（${bd?'更新：'+bd:'2026/10/28 版'}）`;
+  const bks=Object.keys(bm).sort();const bd=bks.map(k=>bm[k]&&bm[k].date?`${k} ${bm[k].date.slice(0,10)}`:'').filter(Boolean).join('、');
+  $('srcline').textContent=PLANT==='F16'?`核准 ${D.appr.length} 張 × A1／A2 Take off book（${bd?'更新：'+bd:'2026/10/28 版'}）`
+    :`核准 ${D.appr.length} 張 · ${D.book.length?`族譜 ${bks.join('／')||''}${bd?'（更新：'+bd+'）':''}`:'尚未上傳族譜'}`;
+  const ars=[...new Set(D.appr.map(areaOf))].filter(x=>x!=='其他').sort();if(state.area!=='all'&&!ars.includes(state.area))state.area='all';
+  $('areaBtns').innerHTML=ars.map(x=>`<button type="button" data-area="${esc(x)}" aria-pressed="${state.area===x}">${esc(x)}</button>`).join('');
   render();
 }
 function label(a){return a.n?`第 ${a.n} 張`:`${String(a.added||'').slice(0,10)} 上傳`}
 function oldText(a){const r=D.appr.find(x=>String(x.id)===String(a.old)||String(x.n)===String(a.old));return r?`舊版，以${label(r)}為準`:`舊版，以 ${a.old} 為準`}
 function syncBtns(){document.querySelectorAll('#queryCtl .filters button').forEach(b=>{if(b.dataset.area){b.setAttribute('aria-pressed',String(state.area===b.dataset.area));return}const f=b.dataset.f;b.setAttribute('aria-pressed',f==='old'?String(state.old):String(state.f===f))})}
-const areaOf=a=>(String(a.a||'').match(/^A\d/)||['其他'])[0];
-function save(){try{localStorage.setItem('exq',JSON.stringify(state))}catch(e){}}
+const areaOf=a=>(String(a.a||'').toUpperCase().match(/^[A-Z]+\d+/)||['其他'])[0];
+function save(){try{localStorage.setItem(SKEY,JSON.stringify(state))}catch(e){}}
 function bar(c,n){return '<div class="bar" aria-hidden="true">'+['ok','unreg','missing','na'].map(k=>c[k]?`<i class="b-${k}" style="width:${c[k]/n*100}%"></i>`:'').join('')+'</div>'}
 function summary(c){return ['ok','unreg','missing','na'].filter(k=>c[k]).map(k=>`<span class="chip ${k}">${LABEL[k]} ${c[k]}</span>`).join(' ')}
 function passFilter(a){if(!state.old&&a.old)return false;if(state.f==='todo'&&!a.todo)return false;if(state.area!=='all'&&areaOf(a)!==state.area)return false;if(state.f==='gasyes'&&a.gasSt!=='yes')return false;if(state.f==='gasno'&&a.gasSt!=='no')return false;if((state.f==='build'||state.f==='demo')&&a.gasSt!==state.f)return false;return true}
@@ -409,7 +429,7 @@ const tkey=t=>norm(t).replace(/\(.*$/,'');
 const CATL={iso:'ISO 圖',lego:'樂高圖'};
 function isoFor(t,c){const k=tkey(t);return Object.entries(D.iso||{}).filter(([,m])=>tkey(m.t)===k&&(!c||(m.c||'iso')===c)).map(([id,m])=>({id,...m})).sort((x,y)=>String(x.at).localeCompare(String(y.at)))}
 const fsz=n=>n>1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
-function isoItem(f){const u='api/iso/'+f.id,img=/^image\//.test(f.y||'');
+function isoItem(f){const u='api/iso/'+f.id+PQ,img=/^image\//.test(f.y||'');
   return `<div class="isoit">${img?`<a href="${u}" target="_blank" rel="noopener"><img src="${u}" loading="lazy" alt="${esc(f.n)}"></a>`:`<a class="isodoc" href="${u}" target="_blank" rel="noopener">${esc((String(f.n).split('.').pop()||'檔').toUpperCase().slice(0,4))}</a>`}
    <div class="src" style="min-width:0"><a href="${u}" target="_blank" rel="noopener" style="word-break:break-all">${esc(f.n)}</a><br>${esc(String(f.at||'').slice(0,10))} · ${fsz(f.s||0)}${f.by?' · '+esc(f.by):''}<div class="isoact"><span data-isotw="${esc(f.id)}"><button class="btn small" data-isotask="${esc(f.id)}" data-t="${esc(f.t)}">改機台</button></span><button class="btn small danger" data-isodel="${esc(f.id)}">刪除</button></div></div></div>`}
 function isoUp(t,label,c='iso'){return `<label class="btn small primary isobtn">${label||'匯入 '+CATL[c]}<input type="file" hidden multiple accept="image/*,.pdf,.dxf,.dwg" data-isoup="${esc(t)}" data-cat="${c}"></label>`}
@@ -430,7 +450,7 @@ function vcard(v){return `<article class="card vcard"><div class="chead"><span c
   <div class="row"><button class="btn small" data-gojobs="${esc(v.jobs[v.jobs.length-1].date)}">查看施工排程</button></div></article>`}
 function gasChip(a){return `<span class="chip gas-${a.gasSt}">${GASL[a.gasSt]}${a.hook?' '+esc(jd(a.hook))+(pctNow(a.hook)!=null?' · '+pctNow(a.hook)+'%':''):''}${a.gasSt==='no'&&a.pgN?`（已送 ${a.pgN}/${a.p.length} 點）`:''}</span>`}
 function bookWhere(tool){const k=EXQ.toolKey(tool);if(!k)return[];return D.book.filter(b=>b.T&&b.T.includes(k))}
-function shot(a){return a.img?`<a href="${esc(a.img)}" target="_blank" rel="noopener"><img src="${esc(a.img)}" loading="lazy" alt="${esc(a.t)} 核准截圖"></a>`:'<div class="src">沒有截圖</div>'}
+function shot(a){const im=a.img&&String(a.img).startsWith('api/')?a.img+PQ:a.img;a={...a,img:im};return a.img?`<a href="${esc(a.img)}" target="_blank" rel="noopener"><img src="${esc(a.img)}" loading="lazy" alt="${esc(a.t)} 核准截圖"></a>`:'<div class="src">沒有截圖</div>'}
 function card(a,Q){
   const bw=bookWhere(a.t);
   const rows=a.p.map((p,i)=>{

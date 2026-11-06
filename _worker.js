@@ -23,6 +23,8 @@ async function getPart(env, req, key) {
     const v = await env.DB.get(key, 'json');
     if (v !== null) return v;
   }
+  // 初始資料（data.json）只屬於后里 F16；其他廠從空白開始
+  if (env.PLANT !== 'F16') return key === 'ovr' || key === 'meta' ? {} : [];
   const s = await seed(env, req);
   return s[key] ?? (key === 'ovr' ? {} : key === 'meta' ? {} : []);
 }
@@ -383,11 +385,33 @@ async function api(req, env, url) {
   return J({ error: '找不到這個功能。' }, 404);
 }
 
+// ── 廠區分開：后里 F16 沿用原本的資料（不加前綴）；銅鑼廠（TL）的資料都存在「TL/」底下
+const PLANTS = { F16: '', TL: 'TL/' };
+function plantOf(req, url) {
+  const p = String(req.headers.get('x-plant') || url.searchParams.get('p') || 'F16').toUpperCase();
+  return p in PLANTS ? p : 'F16';
+}
+function prefixedKV(kv, pre) {
+  if (!pre || !kv) return kv;
+  return {
+    get: (k, o) => kv.get(pre + k, o),
+    getWithMetadata: (k, o) => kv.getWithMetadata(pre + k, o),
+    put: (k, v, o) => kv.put(pre + k, v, o),
+    delete: k => kv.delete(pre + k),
+    list: async (o = {}) => {
+      const r = await kv.list({ ...o, prefix: pre + (o.prefix || '') });
+      return { ...r, keys: r.keys.map(x => ({ ...x, name: x.name.slice(pre.length) })) };
+    },
+  };
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname.startsWith('/api/')) {
       try {
+        const plant = plantOf(req, url);
+        env = { ...env, PLANT: plant, DB: prefixedKV(env.DB, PLANTS[plant]) };
         return await api(req, env, url);
       } catch (e) {
         return J({ error: '伺服器錯誤：' + (e && e.message ? e.message : String(e)) }, 500);
