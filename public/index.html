@@ -857,18 +857,20 @@ function parseTums(wb){const ws=wb.Sheets['facility_exhaust'];if(!ws)throw new E
   if(!tool)throw new Error('找不到機台名稱（C 欄最下面）');if(!spec.length)throw new Error('找不到 Exhaust 派點資料');
   return {tool:tool.toUpperCase(),micap,svy,floor,area:bd.Fab?String(bd.Fab):'',spec}}
 let TUMS=null;
+// 同一台：機台名稱相同，或 MICAP 相同（含名稱裡括號寫的 MICAP）
+const svyMatch=t=>SVY.find(x=>tkey(x.tool)===tkey(t.tool))||(t.micap?SVY.find(x=>x.micap===t.micap||String(x.tool).replace(/\s/g,'').includes(t.micap)):null);
 $('svyView').addEventListener('change',async e=>{if(e.target.id!=='tumsFile'||!e.target.files.length)return;const f=e.target.files[0];const pv=$('tumsPrev');pv.innerHTML='<span class="src">讀取中…</span>';
-  try{await loadXLSX();const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});TUMS={...parseTums(wb),file:f.name};const ex=SVY.find(x=>tkey(x.tool)===tkey(TUMS.tool));
+  try{await loadXLSX();const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});TUMS={...parseTums(wb),file:f.name};const ex=svyMatch(TUMS);
     pv.innerHTML=`<div class="jform" style="margin-top:8px"><h3 style="margin:0">匯入預覽：${esc(TUMS.tool)}${TUMS.micap?' · MICAP '+esc(TUMS.micap):''}</h3>
       <div class="fields"><label class="f">會勘日期<input type="date" id="tm_svy" value="${esc(TUMS.svy)}"></label><label class="f">ODD<input type="date" id="tm_odd" value="${esc(ex&&ex.odd||'')}"></label><label class="f">分區<input id="tm_grp" value="${esc(ex&&ex.grp||TUMS.floor)}"></label></div>
-      <div class="src">${esc(specSummary(TUMS.spec))}${ex?`　<b>已有這台的會勘紀錄，匯入會更新它的 Exhaust 規格</b>`:''}</div>${specTable(TUMS.spec)}
+      <div class="src">${esc(specSummary(TUMS.spec))}${ex?`　<b>已有這台的會勘紀錄（${esc(ex.tool)}），匯入會更新它的 Exhaust 規格</b>${tkey(ex.tool)!==tkey(TUMS.tool)?`<br><span style="color:var(--bad)">注意：紀錄上的機台名稱是 ${esc(ex.tool)}，檔案裡是 ${esc(TUMS.tool)}，名稱不會被改掉</span>`:''}`:''}</div>${specTable(TUMS.spec)}
       <div class="row"><button type="button" class="btn primary" data-tumsok>${ex?'更新會勘紀錄':'加入會勘紀錄'}</button><button type="button" class="btn" data-tumscancel>取消</button><span class="src" id="tumsMsg"></span></div></div>`}
   catch(err){pv.innerHTML=`<span class="src" style="color:var(--bad)">讀取失敗：${esc(err.message)}</span>`}e.target.value=''});
 $('svyView').addEventListener('click',async e=>{
   const sp=e.target.closest('[data-svspec]');if(sp){const id=sp.dataset.svspec;if(SVOPEN.has(id))SVOPEN.delete(id);else SVOPEN.add(id);renderSvy();return}
   if(e.target.closest('[data-tumscancel]')){TUMS=null;$('tumsPrev').innerHTML='';return}
-  const tk=e.target.closest('[data-tumsok]');if(tk&&TUMS){tk.disabled=true;const ex=SVY.find(x=>tkey(x.tool)===tkey(TUMS.tool));
-    const body={tool:TUMS.tool,micap:TUMS.micap,area:TUMS.area,floor:TUMS.floor,spec:TUMS.spec,src:'TUMS：'+TUMS.file,svy:$('tm_svy').value,odd:$('tm_odd').value,grp:$('tm_grp').value};
+  const tk=e.target.closest('[data-tumsok]');if(tk&&TUMS){tk.disabled=true;const ex=svyMatch(TUMS);
+    const body={tool:ex?ex.tool:TUMS.tool,micap:TUMS.micap,area:TUMS.area,floor:TUMS.floor,spec:TUMS.spec,src:'TUMS：'+TUMS.file,svy:$('tm_svy').value,odd:$('tm_odd').value,grp:$('tm_grp').value};
     try{const r=ex?await call('api/survey/'+ex.id,'PATCH',body):await call('api/survey','POST',body);SVPEND[r.item.id]={v:r.item,t:Date.now()};SVY=svApply(SVY);SVOPEN.add(r.item.id);TUMS=null;state.svyF='all';renderSvy();
       const m=document.querySelector(`[data-svmsg="${CSS.escape(r.item.id)}"]`);if(m)m.textContent=ex?'已更新 Exhaust 規格':'已加入'}
     catch(err){tk.disabled=false;$('tumsMsg').textContent=err.message}return}
