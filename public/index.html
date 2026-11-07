@@ -793,10 +793,12 @@ const svTools=x=>[x.tool,...String(x.link||'').split(/[、,，+＋\s]+/)].map(tk
 function svyFor(t){const k=tkey(t);return SVY.filter(x=>svTools(x).includes(k))}
 // Exhaust 需求：依系統彙總（派點、接點數、合計 CMM、管徑）
 const sysShort=s=>String(s||'').replace(/\(.*$/,'').trim()||'其他';
-function specGroups(spec){const m=new Map();for(const r of spec||[]){const k=r.sys||'其他';if(!m.has(k))m.set(k,{sys:k,rows:[],pts:new Set(),cmm:0,sizes:new Set()});const g=m.get(k);g.rows.push(r);if(r.pt)g.pts.add(r.pt);if(/CMM/i.test(r.unit||'')&&!isNaN(+r.flow))g.cmm+=+r.flow;if(r.size)g.sizes.add(r.size)}return [...m.values()]}
+// 流量換算成 CMM：CFM×0.0283、LPM÷1000
+const toCMM=r=>{const v=+r.flow;if(!r.flow||isNaN(v))return 0;const u=String(r.unit||'').toUpperCase();return u==='CMM'?v:u==='CFM'?v*0.0283168:u==='LPM'?v/1000:u==='CMH'?v/60:0};
+function specGroups(spec){const m=new Map();for(const r of spec||[]){const k=r.sys||'其他';if(!m.has(k))m.set(k,{sys:k,rows:[],pts:new Set(),cmm:0,sizes:new Set()});const g=m.get(k);g.rows.push(r);if(r.pt)g.pts.add(r.pt);g.cmm+=toCMM(r);if(r.size)g.sizes.add(r.size)}return [...m.values()]}
 const cmmTxt=n=>Math.round(n*100)/100;
 function specSummary(spec){return specGroups(spec).map(g=>`${sysShort(g.sys)} ${g.rows.length} 個接點 ${cmmTxt(g.cmm)} CMM`).join('／')}
-function specTable(spec){return specGroups(spec).map(g=>`<div class="specg"><div class="spech"><b>${esc(g.sys)}</b><span>派點 <code>${[...g.pts].map(esc).join('、')||'—'}</code></span><span>${g.rows.length} 個接點 · 合計 <b>${cmmTxt(g.cmm)} CMM</b></span><span>管徑 ${[...g.sizes].map(esc).join('、')}</span></div>
+function specTable(spec){return specGroups(spec).map(g=>`<div class="specg"><div class="spech"><b>${esc(g.sys)}</b><span>派點 <code>${[...g.pts].map(esc).join('、')||'—'}</code></span><span>${g.rows.length} 個接點 · 合計 <b>${cmmTxt(g.cmm)} CMM</b>${g.rows.some(r=>r.unit&&!/^CMM$/i.test(r.unit))?'<small class="src">（已換算 CFM／LPM）</small>':''}</span><span>管徑 ${[...g.sizes].map(esc).join('、')}</span></div>
   <div class="tbl"><table class="spect"><thead><tr><th>元件</th><th>樓層</th><th>流量</th><th>管徑</th><th>壓力 (Pa)</th><th>接點編號</th><th>TPOC</th><th>備註</th></tr></thead><tbody>${g.rows.map(r=>`<tr><td>${esc(r.comp)}</td><td class="d">${esc(r.fl||'')}</td><td class="d">${esc(r.flow)} ${esc(r.unit)}</td><td class="d">${esc(r.size)}</td><td class="d">${esc(r.pmax)}～${esc(r.pmin)}</td><td class="d">${esc(r.vno)}</td><td class="d">${esc(r.tpoc)}</td><td>${esc(r.rmk)}</td></tr>`).join('')}</tbody></table></div></div>`).join('')}
 const SVOPEN=new Set();
 // Exhaust 需求人工編輯
