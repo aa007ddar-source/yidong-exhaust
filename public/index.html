@@ -841,7 +841,7 @@ function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
   const open=all.filter(x=>!x.done),soon=open.filter(x=>x.on&&x.on>=todayStr()&&x.on<=addDays(todayStr(),7)).length,late=open.filter(x=>x.on&&x.on<todayStr()).length;
   $('svyView').innerHTML=`<div class="jobs"><div class="dayrow"><h2>機台會勘紀錄 <span class="count">${all.length} 筆 · 未完成 ${open.length}${soon?` · 7 天內 ON ${soon}`:''}${late?` · 已過 ON ${late}`:''}</span></h2>
    <div class="filters" role="group" aria-label="會勘篩選">${[['open','未完成'],['done','已完成'],['all','全部']].map(([k,v])=>`<button type="button" data-svf="${k}" aria-pressed="${f===k}">${v}</button>`).join('')}</div></div>
-   <div class="tumsbox"><label class="btn small primary" style="cursor:pointer">匯入 TUMS Excel<input type="file" id="tumsFile" hidden accept=".xlsx,.xls"></label><span class="src">讀取 facility_exhaust 頁：A 欄派點、C 欄最下面機台名稱、Function_Type 欄最下面 MICAP 與上方系統名稱，Exhaust 規格一起帶入</span><div id="tumsPrev"></div></div>
+   <div class="tumsbox"><label class="btn small primary" style="cursor:pointer">匯入 TUMS Excel<input type="file" id="tumsFile" hidden accept=".xlsx,.xls"></label><label class="btn small" style="cursor:pointer">匯入機台清單<input type="file" id="mlistFile" hidden accept=".xlsx,.xls"></label><span class="src">讀取 facility_exhaust 頁：A 欄派點、C 欄最下面機台名稱、Function_Type 欄最下面 MICAP 與上方系統名稱，Exhaust 規格一起帶入</span><div id="tumsPrev"></div></div>
    <div class="vleg"><span>廠商管徑：</span>${VENDORS.map(([v,d])=>`<span><b>${v}</b> ${d}</span>`).join('')}</div>
    ${list.length?grps.map(g=>{const L=list.filter(x=>(x.grp||'其他')===g);return `<section><h3 class="subh">${esc(g)} <span class="count">${L.length} 筆</span></h3><div class="tbl svtbl"><table><colgroup><col style="width:52px"><col style="width:170px"><col style="width:52px"><col style="width:64px"><col style="width:64px"><col style="width:110px"><col style="width:130px"><col style="width:70px"><col><col style="width:130px"></colgroup><thead><tr><th>完成</th><th>機台</th><th>樓層</th><th>會勘</th><th>ODD</th><th>ON</th><th>GD／N2 LP</th><th>廠商</th><th>備註</th><th></th></tr></thead><tbody>${L.map(row).join('')}</tbody></table></div></section>`}).join(''):`<div class="empty">${all.length?'沒有符合的紀錄。':'還沒有會勘紀錄，可以在下方新增。'}</div>`}
    <form class="jform" id="svForm" autocomplete="off"><h3 style="margin:0">${SVF.id?'修改會勘紀錄：'+esc(SVF.tool):'新增會勘紀錄'}</h3>
@@ -894,9 +894,24 @@ function parseTums(wb,fname){const ws=wb.Sheets['facility_exhaust'];if(!ws)throw
   const mf=fc.find(x=>/Mainframe/i.test(x.Module_Type))||fc[0];const floor=mf?String(mf.Floor||''):'';
   if(!spec.length)throw new Error('找不到 Exhaust 派點資料');
   return {tool:tool.toUpperCase(),micap,svy,floor,area:bd.Fab?String(bd.Fab):'',spec}}
-let TUMS=null;
+let TUMS=null,MLIST=null;
+// 機台清單（例如 機台.xlsx：CALM／MICAP、Tool ID…）：沒有的機台新增到會勘紀錄
+function parseMList(wb){const out=[];for(const name of wb.SheetNames){const A=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
+  const hi=A.findIndex(r=>r&&r.some(v=>/^(CALM|MICAP)/i.test(String(v||'').trim()))&&r.some(v=>/TOOL\s*ID|機台/i.test(String(v||''))));if(hi<0)continue;
+  const H=A[hi].map(v=>String(v||'').trim());const iM=H.findIndex(h=>/^(CALM|MICAP)/i.test(h)),iT=H.findIndex(h=>/TOOL\s*ID|機台/i.test(h));
+  for(const r of A.slice(hi+1)){if(!r)continue;const m=r[iM]==null?'':String(r[iM]).trim(),t=r[iT]==null?'':String(r[iT]).trim().toUpperCase();if(m||t)out.push({micap:m,tool:t})}}
+  if(!out.length)throw new Error('找不到「CALM／MICAP」和「Tool ID」欄');return out}
 // 同一台：機台名稱相同，或 MICAP 相同（含名稱裡括號寫的 MICAP）
 const svyMatch=t=>(t.tool&&SVY.find(x=>tkey(x.tool)===tkey(t.tool)))||(t.micap?SVY.find(x=>x.micap===t.micap||String(x.tool).replace(/\s/g,'').includes(t.micap)):null);
+$('svyView').addEventListener('change',async e=>{if(e.target.id!=='mlistFile'||!e.target.files.length)return;const pv=$('tumsPrev');pv.innerHTML='<span class="src">讀取中…</span>';
+  try{await loadXLSX();const wb=XLSX.read(await e.target.files[0].arrayBuffer(),{type:'array'});const L=parseMList(wb);
+    MLIST=L.map(x=>({...x,ex:svyMatch(x)}));const nw=MLIST.filter(x=>!x.ex);
+    const gc={};SVY.forEach(x=>{if(x.grp)gc[x.grp]=(gc[x.grp]||0)+1});const g0=Object.entries(gc).sort((a,b)=>b[1]-a[1])[0];
+    pv.innerHTML=`<div class="jform" style="margin-top:8px"><h3 style="margin:0">機台清單：共 ${MLIST.length} 台，新增 ${nw.length} 台</h3>
+      <div class="tbl"><table class="spect"><thead><tr><th>MICAP</th><th>Tool ID</th><th>結果</th></tr></thead><tbody>${MLIST.map(x=>`<tr><td class="d">${esc(x.micap)}</td><td class="d">${esc(x.tool)}</td><td>${x.ex?'已有（'+esc(x.ex.tool)+'）':'<b>新增</b>'}</td></tr>`).join('')}</tbody></table></div>
+      ${nw.length?`<div class="fields"><label class="f">新增機台的分區<input id="ml_grp" value="${esc(g0?g0[0]:'')}"></label></div>`:''}
+      <div class="row"><button type="button" class="btn primary" data-mlok${nw.length?'':' disabled'}>${nw.length?`新增 ${nw.length} 台`:'沒有要新增的機台'}</button><button type="button" class="btn" data-tumscancel>取消</button><span class="src" id="tumsMsg"></span></div></div>`}
+  catch(err){pv.innerHTML=`<span class="src" style="color:var(--bad)">讀取失敗：${esc(err.message)}</span>`}e.target.value=''});
 $('svyView').addEventListener('change',async e=>{if(e.target.id!=='tumsFile'||!e.target.files.length)return;const f=e.target.files[0];const pv=$('tumsPrev');pv.innerHTML='<span class="src">讀取中…</span>';
   try{await loadXLSX();const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});TUMS={...parseTums(wb,f.name),file:f.name};const ex=svyMatch(TUMS);
     pv.innerHTML=`<div class="jform" style="margin-top:8px"><h3 style="margin:0">匯入預覽：${esc(TUMS.tool||'（檔案裡沒有機台名稱，請在下面填寫）')}${TUMS.micap?' · MICAP '+esc(TUMS.micap):''}</h3>
@@ -915,7 +930,11 @@ $('svyView').addEventListener('click',async e=>{
       try{const r=await call('api/survey/'+id,'PATCH',{spec:rows});SVPEND[id]={v:r.item,t:Date.now()};SVY=svApply(SVY);SPECED=null;SVOPEN.add(id);renderSvy();const m=document.querySelector(`[data-svmsg="${CSS.escape(id)}"]`);if(m)m.textContent='Exhaust 需求已儲存'}
       catch(err){sv.disabled=false;$('spMsg').textContent='儲存失敗：'+err.message}return}}
   const sp=e.target.closest('[data-svspec]');if(sp){const id=sp.dataset.svspec;if(SVOPEN.has(id))SVOPEN.delete(id);else SVOPEN.add(id);renderSvy();return}
-  if(e.target.closest('[data-tumscancel]')){TUMS=null;$('tumsPrev').innerHTML='';return}
+  if(e.target.closest('[data-tumscancel]')){TUMS=null;MLIST=null;$('tumsPrev').innerHTML='';return}
+  const mo=e.target.closest('[data-mlok]');if(mo&&MLIST){mo.disabled=true;const grp=($('ml_grp')||{}).value||'';const nw=MLIST.filter(x=>!x.ex&&(x.tool||x.micap));
+    try{const r=await call('api/survey','POST',{items:nw.map(x=>({tool:x.tool||x.micap,micap:x.micap,grp}))});for(const it of r.items||[])SVPEND[it.id]={v:it,t:Date.now()};SVY=svApply(SVY);MLIST=null;state.svyF='all';renderSvy();
+      const m=$('tumsPrev');if(m)m.innerHTML=`<span class="src">已新增 ${(r.items||[]).length} 台機台</span>`}
+    catch(err){mo.disabled=false;$('tumsMsg').textContent=err.message}return}
   const tk=e.target.closest('[data-tumsok]');if(tk&&TUMS){tk.disabled=true;const ex=svyMatch(TUMS);
     const body={tool:($('tm_tool').value||'').trim()||TUMS.tool||TUMS.micap,micap:TUMS.micap,area:TUMS.area,floor:$('tm_floor').value,spec:TUMS.spec,src:'TUMS：'+TUMS.file,svy:$('tm_svy').value,odd:$('tm_odd').value,grp:$('tm_grp').value};
     try{const r=ex?await call('api/survey/'+ex.id,'PATCH',body):await call('api/survey','POST',body);SVPEND[r.item.id]={v:r.item,t:Date.now()};SVY=svApply(SVY);SVOPEN.add(r.item.id);TUMS=null;state.svyF='all';renderSvy();
