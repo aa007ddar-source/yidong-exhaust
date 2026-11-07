@@ -812,10 +812,12 @@ function inchOf(size){const t=String(size||'').trim();let m;
   return t}
 const inchVal=s=>{const t=String(s).replace('吋','');const m=t.match(/^(\d+)(?:-(\d+)\/(\d+))?$/);if(m)return +m[1]+(m[2]?m[2]/m[3]:0);const f=t.match(/^(\d+)\/(\d+)$/);return f?f[1]/f[2]:0};
 function matOf(m){const t=String(m||'').toUpperCase();if(!t)return '';if(/COAT/.test(t))return 'Coating';if(/GALVAN|鍍鋅/.test(t))return '鍍鋅';if(/PVC/.test(t))return 'PVC';if(/SS\s*304|SUS/.test(t))return 'SUS304';if(/PP/.test(t))return 'PP';return String(m).trim()}
-function specNote(spec){const M=new Map();for(const r of spec||[]){if(!r.size)continue;const k=matOf(r.mat);if(!M.has(k))M.set(k,new Map());const z=inchOf(r.size);M.get(k).set(z,(M.get(k).get(z)||0)+1)}
+// 管材依系統決定：SEX／AEX（含 Scrubber）＝Coating，SOX＝SUS304，GEX＝鍍鋅；其他系統才看 TUMS 材質
+function sysMat(sys){const t=String(sys||'').toUpperCase();if(/^(SEX|AEX|CVD)/.test(t))return 'Coating';if(/^(SOX|MIX|VEX)/.test(t))return 'SUS304';if(/^(GEX|HEX)/.test(t))return '鍍鋅';return ''}
+function specNote(spec){const M=new Map();for(const r of spec||[]){if(!r.size)continue;const k=sysMat(r.sys)||matOf(r.mat);if(!M.has(k))M.set(k,new Map());const z=inchOf(r.size);M.get(k).set(z,(M.get(k).get(z)||0)+1)}
   return [...M].map(([k,z])=>(k?k+' ':'')+[...z].sort((a,b)=>inchVal(b[0])-inchVal(a[0])).map(([s,n])=>`${s}*${n}`).join(' ')).join('　')}
 // Exhaust 需求人工編輯
-const SPK=[['sys','系統',120],['pt','派點',170],['comp','元件',120],['fl','樓層',52],['flow','流量',56],['unit','單位',56],['size','管徑',70],['mat','材質',110],['pmax','壓力上限',62],['pmin','壓力下限',62],['vno','接點編號',62],['tpoc','TPOC',110],['rmk','備註',120]];
+const SPK=[['sys','系統',120],['pt','派點',170],['comp','元件',120],['fl','樓層',52],['flow','流量',56],['unit','單位',56],['size','管徑',70],['pmax','壓力上限',62],['pmin','壓力下限',62],['vno','接點編號',62],['tpoc','TPOC',110],['rmk','備註',120]];
 const SYSL=['AEX(鹼排氣)','SEX(酸排氣)','SOX(有機排氣)','GEX(一般排氣)','HEX(熱排氣)'];
 let SPECED=null; // {id, rows}
 function specEditor(){const R=SPECED.rows;
