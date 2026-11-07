@@ -115,6 +115,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .svtbl .lk{font:.76rem var(--mono);color:var(--muted)}
 .svtbl .acts{white-space:nowrap}
 .specbtn{margin-top:4px;font-size:.74rem;padding:2px 7px}
+.pipenote{font-weight:600;white-space:normal}
 .svtbl tr.specrow td{background:var(--bg);padding:10px 12px}
 .specg{margin-bottom:10px}
 .spech{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:.85rem;margin-bottom:4px}
@@ -799,18 +800,30 @@ function specGroups(spec){const m=new Map();for(const r of spec||[]){const k=r.s
 const cmmTxt=n=>Math.round(n*100)/100;
 function specSummary(spec){return specGroups(spec).map(g=>`${sysShort(g.sys)} ${g.rows.length} 個接點 ${cmmTxt(g.cmm)} CMM`).join('／')}
 function specTable(spec){return specGroups(spec).map(g=>`<div class="specg"><div class="spech"><b>${esc(g.sys)}</b><span>派點 <code>${[...g.pts].map(esc).join('、')||'—'}</code></span><span>${g.rows.length} 個接點 · 合計 <b>${cmmTxt(g.cmm)} CMM</b>${g.rows.some(r=>r.unit&&!/^CMM$/i.test(r.unit))?'<small class="src">（已換算 CFM／LPM）</small>':''}</span><span>管徑 ${[...g.sizes].map(esc).join('、')}</span></div>
-  <div class="tbl"><table class="spect"><thead><tr><th>元件</th><th>樓層</th><th>流量</th><th>管徑</th><th>壓力 (Pa)</th><th>接點編號</th><th>TPOC</th><th>備註</th></tr></thead><tbody>${g.rows.map(r=>`<tr><td>${esc(r.comp)}</td><td class="d">${esc(r.fl||'')}</td><td class="d">${esc(r.flow)} ${esc(r.unit)}</td><td class="d">${esc(r.size)}</td><td class="d">${esc(r.pmax)}～${esc(r.pmin)}</td><td class="d">${esc(r.vno)}</td><td class="d">${esc(r.tpoc)}</td><td>${esc(r.rmk)}</td></tr>`).join('')}</tbody></table></div></div>`).join('')}
+  <div class="tbl"><table class="spect"><thead><tr><th>元件</th><th>樓層</th><th>流量</th><th>管徑</th><th>壓力 (Pa)</th><th>接點編號</th><th>TPOC</th><th>備註</th></tr></thead><tbody>${g.rows.map(r=>`<tr><td>${esc(r.comp)}</td><td class="d">${esc(r.fl||'')}</td><td class="d">${esc(r.flow)} ${esc(r.unit)}</td><td class="d">${esc(r.size)}${inchOf(r.size)!==r.size?` <span class="lk">(${esc(inchOf(r.size))})</span>`:''}</td><td class="d">${esc(r.pmax)}～${esc(r.pmin)}</td><td class="d">${esc(r.vno)}</td><td class="d">${esc(r.tpoc)}</td><td>${esc(r.rmk)}</td></tr>`).join('')}</tbody></table></div></div>`).join('')}
 const SVOPEN=new Set();
+// 備註用的管材規格：材質＋吋數＊數量（65A、75A＝3吋，100A＝4吋，150A＝6吋）
+const A2IN={15:'1/2',20:'3/4',25:'1',32:'1-1/4',40:'1-1/2',50:'2',65:'3',75:'3',80:'3',100:'4',125:'5',150:'6',200:'8',250:'10',300:'12'};
+const NW2IN={16:'3/4',25:'1',40:'1-1/2',50:'2'};
+function inchOf(size){const t=String(size||'').trim();let m;
+  if((m=t.match(/^(\d+)\s*A$/i)))return A2IN[m[1]]?A2IN[m[1]]+'吋':t;
+  if((m=t.match(/^([\d.\/\-]+)\s*(?:inch|in|"|吋)$/i)))return m[1]+'吋';
+  if((m=t.match(/^(\d+)\s*NW$/i)))return NW2IN[m[1]]?NW2IN[m[1]]+'吋':t;
+  return t}
+const inchVal=s=>{const t=String(s).replace('吋','');const m=t.match(/^(\d+)(?:-(\d+)\/(\d+))?$/);if(m)return +m[1]+(m[2]?m[2]/m[3]:0);const f=t.match(/^(\d+)\/(\d+)$/);return f?f[1]/f[2]:0};
+function matOf(m){const t=String(m||'').toUpperCase();if(!t)return '';if(/COAT/.test(t))return 'Coating';if(/GALVAN|鍍鋅/.test(t))return '鍍鋅';if(/PVC/.test(t))return 'PVC';if(/SS\s*304|SUS/.test(t))return 'SUS304';if(/PP/.test(t))return 'PP';return String(m).trim()}
+function specNote(spec){const M=new Map();for(const r of spec||[]){if(!r.size)continue;const k=matOf(r.mat);if(!M.has(k))M.set(k,new Map());const z=inchOf(r.size);M.get(k).set(z,(M.get(k).get(z)||0)+1)}
+  return [...M].map(([k,z])=>(k?k+' ':'')+[...z].sort((a,b)=>inchVal(b[0])-inchVal(a[0])).map(([s,n])=>`${s}*${n}`).join(' ')).join('　')}
 // Exhaust 需求人工編輯
-const SPK=[['sys','系統',120],['pt','派點',170],['comp','元件',120],['fl','樓層',52],['flow','流量',56],['unit','單位',56],['size','管徑',70],['pmax','壓力上限',62],['pmin','壓力下限',62],['vno','接點編號',62],['tpoc','TPOC',110],['rmk','備註',120]];
+const SPK=[['sys','系統',120],['pt','派點',170],['comp','元件',120],['fl','樓層',52],['flow','流量',56],['unit','單位',56],['size','管徑',70],['mat','材質',110],['pmax','壓力上限',62],['pmin','壓力下限',62],['vno','接點編號',62],['tpoc','TPOC',110],['rmk','備註',120]];
 const SYSL=['AEX(鹼排氣)','SEX(酸排氣)','SOX(有機排氣)','GEX(一般排氣)','HEX(熱排氣)'];
 let SPECED=null; // {id, rows}
 function specEditor(){const R=SPECED.rows;
   return `<div class="speced"><div class="row" style="gap:8px;margin-bottom:6px"><b>編輯 Exhaust 需求</b><span class="src">改完按「儲存」；流量以 CMM 計算合計</span></div>
   <div class="tbl"><table class="spect spedt"><thead><tr>${SPK.map(([,l])=>`<th>${l}</th>`).join('')}<th></th></tr></thead><tbody>
-  ${R.map((r,i)=>`<tr>${SPK.map(([k,l,w])=>`<td><input data-spi="${i}" data-spk="${k}" value="${esc(r[k]||'')}" style="width:${w}px"${k==='sys'?' list="spSys"':k==='unit'?' list="spUnit"':''} aria-label="${l}"></td>`).join('')}<td><button type="button" class="btn small danger" data-sprm="${i}" aria-label="刪除這列">刪除</button></td></tr>`).join('')}
-  </tbody></table></div><datalist id="spSys">${SYSL.map(v=>`<option value="${v}">`).join('')}</datalist><datalist id="spUnit"><option value="CMM"><option value="LPM"></datalist>
-  <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="btn small" data-spnew>＋ 新增接點</button><span style="flex:1"></span><span class="src" id="spMsg">${esc(specSummary(R))}</span><button type="button" class="btn small" data-spcancel>取消</button><button type="button" class="btn small primary" data-spsave>儲存</button></div></div>`}
+  ${R.map((r,i)=>`<tr>${SPK.map(([k,l,w])=>`<td><input data-spi="${i}" data-spk="${k}" value="${esc(r[k]||'')}" style="width:${w}px"${k==='sys'?' list="spSys"':k==='unit'?' list="spUnit"':k==='mat'?' list="spMat"':''} aria-label="${l}"></td>`).join('')}<td><button type="button" class="btn small danger" data-sprm="${i}" aria-label="刪除這列">刪除</button></td></tr>`).join('')}
+  </tbody></table></div><datalist id="spSys">${SYSL.map(v=>`<option value="${v}">`).join('')}</datalist><datalist id="spUnit"><option value="CMM"><option value="LPM"><option value="CFM"></datalist><datalist id="spMat"><option value="SS304 WITH COATING"><option value="GALVANIZED STEEL"><option value="PVC"><option value="SS304"></datalist>
+  <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="btn small" data-spnew>＋ 新增接點</button><span style="flex:1"></span><span class="src" id="spMsg">${esc(specSummary(R))}　備註：${esc(specNote(R))}</span><button type="button" class="btn small" data-spcancel>取消</button><button type="button" class="btn small primary" data-spsave>儲存</button></div></div>`}
 function svyLine(t){const L=svyFor(t);if(!L.length)return '';return L.map(x=>`<div class="svl">會勘紀錄${x.done?'（已完成）':''}${x.micap?' · MICAP '+esc(x.micap):''}${x.spec&&x.spec.length?' · Exhaust：'+esc(specSummary(x.spec)):''}：會勘 <b>${x.svy?md(x.svy):'—'}</b> · ODD <b>${x.odd?md(x.odd):'—'}</b> · ON <b>${x.on?md(x.on):esc(x.onText||'—')}</b>${x.vendor?' · '+esc(x.vendor):''}${x.gd?' · '+esc(x.gd):''}${x.note?' · '+esc(x.note):''}</div>`).join('')}
 function onFlag(x){if(x.done||!x.on)return '';const t=todayStr();if(x.on<t)return ' <span class="chip late">已過 ON</span>';if(x.on<=addDays(t,7))return ' <span class="chip soon">7 天內 ON</span>';return ''}
 const blankSvy=(o={})=>({id:'',grp:'',floor:'',tool:'',link:'',svy:'',odd:'',on:'',onText:'',vendor:'',gd:'',note:'',...o});
@@ -821,7 +834,7 @@ function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
   const row=x=>`<tr class="${x.done?'done':''}"><td><input type="checkbox" data-svdone="${esc(x.id)}"${x.done?' checked':''} aria-label="完成" style="width:18px;height:18px;accent-color:var(--accent)"></td>
     <td><button class="pt" data-svq="${esc(x.tool)}" style="font-weight:600">${esc(x.tool)}</button>${x.micap?`<div class="lk">MICAP ${esc(x.micap)}</div>`:''}${x.link?`<div class="lk">＋${esc(x.link)}</div>`:''}${x.spec&&x.spec.length?`<button type="button" class="btn small specbtn" data-svspec="${esc(x.id)}" aria-expanded="${SVOPEN.has(x.id)}">${SVOPEN.has(x.id)?'▾':'▸'} Exhaust 需求 ${x.spec.length}</button>`:`<button type="button" class="btn small specbtn" data-spadd="${esc(x.id)}">＋ Exhaust 需求</button>`}</td>
     <td class="d">${esc(x.floor||'—')}</td><td class="d">${x.svy?md(x.svy):'—'}</td><td class="d">${x.odd?md(x.odd):'—'}</td><td class="d">${x.on?md(x.on):esc(x.onText||'—')}${x.on&&x.onText?`<div class="lk">${esc(x.onText)}</div>`:''}${onFlag(x)}</td>
-    <td>${esc(x.gd||'')}</td><td>${esc(x.vendor||'')}</td><td>${esc(x.note||'')}</td>
+    <td>${esc(x.gd||'')}</td><td>${esc(x.vendor||'')}</td><td>${x.spec&&x.spec.length?`<b class="pipenote">${esc(specNote(x.spec))}</b>${x.note?'<div class="lk">'+esc(x.note)+'</div>':''}`:esc(x.note||'')}</td>
     <td class="acts"><button class="btn small" data-svedit="${esc(x.id)}">修改</button> <button class="btn small danger" data-svdel="${esc(x.id)}">刪除</button><div class="src" data-svmsg="${esc(x.id)}"></div></td></tr>${SPECED&&SPECED.id===x.id?`<tr class="specrow"><td colspan="10">${specEditor()}</td></tr>`:x.spec&&x.spec.length&&SVOPEN.has(x.id)?`<tr class="specrow"><td colspan="10"><div class="row" style="gap:10px;margin-bottom:6px"><span class="src">${esc([x.area,x.loc,x.floor,x.src].filter(Boolean).join(' · '))}</span><button type="button" class="btn small" data-spedit="${esc(x.id)}">編輯 Exhaust 需求</button></div>${specTable(x.spec)}</td></tr>`:''}`;
   const open=all.filter(x=>!x.done),soon=open.filter(x=>x.on&&x.on>=todayStr()&&x.on<=addDays(todayStr(),7)).length,late=open.filter(x=>x.on&&x.on<todayStr()).length;
   $('svyView').innerHTML=`<div class="jobs"><div class="dayrow"><h2>機台會勘紀錄 <span class="count">${all.length} 筆 · 未完成 ${open.length}${soon?` · 7 天內 ON ${soon}`:''}${late?` · 已過 ON ${late}`:''}</span></h2>
@@ -852,7 +865,7 @@ function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
     <datalist id="jfTools2">${D.appr.filter(a=>!a.old).map(a=>`<option value="${esc(a.t)}">`).join('')}</datalist>
     <div class="row"><button type="submit" class="btn primary">${SVF.id?'儲存修改':'新增紀錄'}</button>${SVF.id?'<button type="button" class="btn" data-svcancel>取消修改</button>':''}<span class="src" id="svMsg"></span></div>
    </form></div>`}
-$('svyView').addEventListener('input',e=>{const d=e.target.dataset;if(SPECED&&d.spi!=null){SPECED.rows[+d.spi][d.spk]=e.target.value;const m=$('spMsg');if(m&&(d.spk==='flow'||d.spk==='sys'||d.spk==='unit'))m.textContent=specSummary(SPECED.rows);return}const m=e.target.id.match(/^sv_(\w+)$/);if(m)SVF[m[1]]=e.target.value});
+$('svyView').addEventListener('input',e=>{const d=e.target.dataset;if(SPECED&&d.spi!=null){SPECED.rows[+d.spi][d.spk]=e.target.value;const m=$('spMsg');if(m&&['flow','sys','unit','size','mat'].includes(d.spk))m.textContent=specSummary(SPECED.rows)+'　備註：'+specNote(SPECED.rows);return}const m=e.target.id.match(/^sv_(\w+)$/);if(m)SVF[m[1]]=e.target.value});
 $('svyView').addEventListener('change',async e=>{const id=e.target.dataset.svdone;if(!id)return;const done=e.target.checked;e.target.disabled=true;
   try{const r=await call('api/survey/'+id,'PATCH',{done});SVPEND[id]={v:r.item,t:Date.now()};SVY=svApply(SVY);render()}
   catch(err){e.target.disabled=false;e.target.checked=!done;const m=document.querySelector(`[data-svmsg="${CSS.escape(id)}"]`);if(m)m.textContent=err.message}});
@@ -893,7 +906,7 @@ $('svyView').addEventListener('click',async e=>{
   const se=e.target.closest('[data-spedit]');if(se){const x=SVY.find(y=>y.id===se.dataset.spedit);if(!x)return;SPECED={id:x.id,rows:(x.spec||[]).map(r=>({...r}))};renderSvy();return}
   const sa=e.target.closest('[data-spadd]');if(sa){const x=SVY.find(y=>y.id===sa.dataset.spadd);if(!x)return;SPECED={id:x.id,rows:[{unit:'CMM',pmax:'-400',pmin:'-350'}]};SVOPEN.add(x.id);renderSvy();return}
   if(SPECED){
-    if(e.target.closest('[data-spnew]')){const last=SPECED.rows[SPECED.rows.length-1]||{};SPECED.rows.push({sys:last.sys||'',pt:last.pt||'',comp:last.comp||'',fl:last.fl||'',unit:last.unit||'CMM',pmax:last.pmax||'',pmin:last.pmin||''});renderSvy();return}
+    if(e.target.closest('[data-spnew]')){const last=SPECED.rows[SPECED.rows.length-1]||{};SPECED.rows.push({sys:last.sys||'',pt:last.pt||'',comp:last.comp||'',fl:last.fl||'',mat:last.mat||'',unit:last.unit||'CMM',pmax:last.pmax||'',pmin:last.pmin||''});renderSvy();return}
     const rm=e.target.closest('[data-sprm]');if(rm){SPECED.rows.splice(+rm.dataset.sprm,1);renderSvy();return}
     if(e.target.closest('[data-spcancel]')){SPECED=null;renderSvy();return}
     const sv=e.target.closest('[data-spsave]');if(sv){sv.disabled=true;const id=SPECED.id;const rows=SPECED.rows.filter(r=>SPK.some(([k])=>String(r[k]||'').trim()));
