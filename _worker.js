@@ -216,7 +216,9 @@ async function api(req, env, url) {
     const D8 = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : '';
     const S = (v, n) => String(v || '').slice(0, n);
     const clean = (b, o = {}) => {
-      for (const [k, n] of [['grp', 20], ['link', 120], ['onText', 30], ['vendor', 30], ['gd', 80], ['note', 300], ['by', 30]]) if (k in b) o[k] = S(b[k], n);
+      for (const [k, n] of [['grp', 20], ['link', 120], ['onText', 30], ['vendor', 30], ['gd', 80], ['note', 300], ['by', 30], ['micap', 20], ['area', 40], ['loc', 40], ['floor', 10], ['src', 80]]) if (k in b) o[k] = S(b[k], n);
+      // Exhaust 各系統需求規格（TUMS 匯入）
+      if (Array.isArray(b.spec)) o.spec = b.spec.slice(0, 80).map(r => Object.fromEntries(['sys', 'pt', 'comp', 'flow', 'unit', 'size', 'type', 'mat', 'dir', 'pmax', 'pmin', 'vno', 'tpoc', 'rmk'].map(k => [k, S(r && r[k], 60)])));
       if ('tool' in b) o.tool = S(b.tool, 60).trim();
       for (const k of ['svy', 'odd', 'on']) if (k in b) o[k] = D8(b[k]);
       if ('done' in b) o.done = !!b.done;

@@ -114,6 +114,17 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .svtbl tr.done td{color:var(--muted)}
 .svtbl .lk{font:.76rem var(--mono);color:var(--muted)}
 .svtbl .acts{white-space:nowrap}
+.specbtn{margin-top:4px;font-size:.74rem;padding:2px 7px}
+.svtbl tr.specrow td{background:var(--bg);padding:10px 12px}
+.specg{margin-bottom:10px}
+.spech{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:.85rem;margin-bottom:4px}
+.spech code{font:600 .8rem var(--mono)}
+table.spect{width:100%;border-collapse:collapse;font-size:.8rem;table-layout:auto!important;min-width:760px}
+table.spect th,table.spect td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+table.spect th{font-size:.72rem;color:var(--muted)}
+.tumsbox{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+#tumsPrev{flex-basis:100%}
+#tumsPrev:empty{display:none}
 .vleg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.82rem;color:var(--muted)}
 .vleg b{color:var(--fg)}
 .chip.soon{background:#fef3c7;color:#92400e}.chip.late{background:transparent;color:var(--bad);border:1px solid var(--bad)}
@@ -777,7 +788,15 @@ const svApply=list=>{const now=Date.now(),m=new Map(list.map(x=>[x.id,x]));for(c
 async function loadSvy(){try{const r=await fetch('api/survey',{cache:'no-store'});if(r.ok)SVY=(await r.json()).items||[]}catch(e){}SVY=svApply(SVY);render()}
 const svTools=x=>[x.tool,...String(x.link||'').split(/[、,，+＋\s]+/)].map(tkey).filter(Boolean);
 function svyFor(t){const k=tkey(t);return SVY.filter(x=>svTools(x).includes(k))}
-function svyLine(t){const L=svyFor(t);if(!L.length)return '';return L.map(x=>`<div class="svl">會勘紀錄${x.done?'（已完成）':''}：會勘 <b>${x.svy?md(x.svy):'—'}</b> · ODD <b>${x.odd?md(x.odd):'—'}</b> · ON <b>${x.on?md(x.on):esc(x.onText||'—')}</b>${x.vendor?' · '+esc(x.vendor):''}${x.gd?' · '+esc(x.gd):''}${x.note?' · '+esc(x.note):''}</div>`).join('')}
+// Exhaust 需求：依系統彙總（派點、接點數、合計 CMM、管徑）
+const sysShort=s=>String(s||'').replace(/\(.*$/,'').trim()||'其他';
+function specGroups(spec){const m=new Map();for(const r of spec||[]){const k=r.sys||'其他';if(!m.has(k))m.set(k,{sys:k,rows:[],pts:new Set(),cmm:0,sizes:new Set()});const g=m.get(k);g.rows.push(r);if(r.pt)g.pts.add(r.pt);if(/CMM/i.test(r.unit||'')&&!isNaN(+r.flow))g.cmm+=+r.flow;if(r.size)g.sizes.add(r.size)}return [...m.values()]}
+const cmmTxt=n=>Math.round(n*100)/100;
+function specSummary(spec){return specGroups(spec).map(g=>`${sysShort(g.sys)} ${g.rows.length} 個接點 ${cmmTxt(g.cmm)} CMM`).join('／')}
+function specTable(spec){return specGroups(spec).map(g=>`<div class="specg"><div class="spech"><b>${esc(g.sys)}</b><span>派點 <code>${[...g.pts].map(esc).join('、')||'—'}</code></span><span>${g.rows.length} 個接點 · 合計 <b>${cmmTxt(g.cmm)} CMM</b></span><span>管徑 ${[...g.sizes].map(esc).join('、')}</span></div>
+  <div class="tbl"><table class="spect"><thead><tr><th>元件</th><th>流量</th><th>管徑</th><th>接頭</th><th>材質</th><th>方向</th><th>壓力 (Pa)</th><th>接點編號</th><th>TPOC</th><th>備註</th></tr></thead><tbody>${g.rows.map(r=>`<tr><td>${esc(r.comp)}</td><td class="d">${esc(r.flow)} ${esc(r.unit)}</td><td class="d">${esc(r.size)}</td><td>${esc(r.type)}</td><td>${esc(r.mat)}</td><td>${esc(r.dir)}</td><td class="d">${esc(r.pmax)}～${esc(r.pmin)}</td><td class="d">${esc(r.vno)}</td><td class="d">${esc(r.tpoc)}</td><td>${esc(r.rmk)}</td></tr>`).join('')}</tbody></table></div></div>`).join('')}
+const SVOPEN=new Set();
+function svyLine(t){const L=svyFor(t);if(!L.length)return '';return L.map(x=>`<div class="svl">會勘紀錄${x.done?'（已完成）':''}${x.micap?' · MICAP '+esc(x.micap):''}${x.spec&&x.spec.length?' · Exhaust：'+esc(specSummary(x.spec)):''}：會勘 <b>${x.svy?md(x.svy):'—'}</b> · ODD <b>${x.odd?md(x.odd):'—'}</b> · ON <b>${x.on?md(x.on):esc(x.onText||'—')}</b>${x.vendor?' · '+esc(x.vendor):''}${x.gd?' · '+esc(x.gd):''}${x.note?' · '+esc(x.note):''}</div>`).join('')}
 function onFlag(x){if(x.done||!x.on)return '';const t=todayStr();if(x.on<t)return ' <span class="chip late">已過 ON</span>';if(x.on<=addDays(t,7))return ' <span class="chip soon">7 天內 ON</span>';return ''}
 const blankSvy=(o={})=>({id:'',grp:'',tool:'',link:'',svy:'',odd:'',on:'',onText:'',vendor:'',gd:'',note:'',...o});
 function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
@@ -785,13 +804,14 @@ function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
   const list=f==='open'?all.filter(x=>!x.done):f==='done'?all.filter(x=>x.done):all;
   const order=['A3','A1/A2'];const grps=[...new Set(list.map(x=>x.grp||'其他'))].sort((a,b)=>((order.indexOf(a)+1||99)-(order.indexOf(b)+1||99))||a.localeCompare(b));
   const row=x=>`<tr class="${x.done?'done':''}"><td><input type="checkbox" data-svdone="${esc(x.id)}"${x.done?' checked':''} aria-label="完成" style="width:18px;height:18px;accent-color:var(--accent)"></td>
-    <td><button class="pt" data-svq="${esc(x.tool)}" style="font-weight:600">${esc(x.tool)}</button>${x.link?`<div class="lk">＋${esc(x.link)}</div>`:''}</td>
+    <td><button class="pt" data-svq="${esc(x.tool)}" style="font-weight:600">${esc(x.tool)}</button>${x.micap?`<div class="lk">MICAP ${esc(x.micap)}</div>`:''}${x.link?`<div class="lk">＋${esc(x.link)}</div>`:''}${x.spec&&x.spec.length?`<button type="button" class="btn small specbtn" data-svspec="${esc(x.id)}" aria-expanded="${SVOPEN.has(x.id)}">${SVOPEN.has(x.id)?'▾':'▸'} Exhaust 需求 ${x.spec.length}</button>`:''}</td>
     <td class="d">${x.svy?md(x.svy):'—'}</td><td class="d">${x.odd?md(x.odd):'—'}</td><td class="d">${x.on?md(x.on):esc(x.onText||'—')}${x.on&&x.onText?`<div class="lk">${esc(x.onText)}</div>`:''}${onFlag(x)}</td>
     <td>${esc(x.gd||'')}</td><td>${esc(x.vendor||'')}</td><td>${esc(x.note||'')}</td>
-    <td class="acts"><button class="btn small" data-svedit="${esc(x.id)}">修改</button> <button class="btn small danger" data-svdel="${esc(x.id)}">刪除</button><div class="src" data-svmsg="${esc(x.id)}"></div></td></tr>`;
+    <td class="acts"><button class="btn small" data-svedit="${esc(x.id)}">修改</button> <button class="btn small danger" data-svdel="${esc(x.id)}">刪除</button><div class="src" data-svmsg="${esc(x.id)}"></div></td></tr>${x.spec&&x.spec.length&&SVOPEN.has(x.id)?`<tr class="specrow"><td colspan="9"><div class="src" style="margin-bottom:6px">${esc([x.area,x.loc,x.floor,x.src].filter(Boolean).join(' · '))}</div>${specTable(x.spec)}</td></tr>`:''}`;
   const open=all.filter(x=>!x.done),soon=open.filter(x=>x.on&&x.on>=todayStr()&&x.on<=addDays(todayStr(),7)).length,late=open.filter(x=>x.on&&x.on<todayStr()).length;
   $('svyView').innerHTML=`<div class="jobs"><div class="dayrow"><h2>機台會勘紀錄 <span class="count">${all.length} 筆 · 未完成 ${open.length}${soon?` · 7 天內 ON ${soon}`:''}${late?` · 已過 ON ${late}`:''}</span></h2>
    <div class="filters" role="group" aria-label="會勘篩選">${[['open','未完成'],['done','已完成'],['all','全部']].map(([k,v])=>`<button type="button" data-svf="${k}" aria-pressed="${f===k}">${v}</button>`).join('')}</div></div>
+   <div class="tumsbox"><label class="btn small primary" style="cursor:pointer">匯入 TUMS Excel<input type="file" id="tumsFile" hidden accept=".xlsx,.xls"></label><span class="src">讀取 facility_exhaust 頁：A 欄派點、C 欄最下面機台名稱、Function_Type 欄最下面 MICAP 與上方系統名稱，Exhaust 規格一起帶入</span><div id="tumsPrev"></div></div>
    <div class="vleg"><span>廠商管徑：</span>${VENDORS.map(([v,d])=>`<span><b>${v}</b> ${d}</span>`).join('')}</div>
    ${list.length?grps.map(g=>{const L=list.filter(x=>(x.grp||'其他')===g);return `<section><h3 class="subh">${esc(g)} <span class="count">${L.length} 筆</span></h3><div class="tbl svtbl"><table><colgroup><col style="width:52px"><col style="width:170px"><col style="width:64px"><col style="width:64px"><col style="width:110px"><col style="width:130px"><col style="width:70px"><col><col style="width:130px"></colgroup><thead><tr><th>完成</th><th>機台</th><th>會勘</th><th>ODD</th><th>ON</th><th>GD／N2 LP</th><th>廠商</th><th>備註</th><th></th></tr></thead><tbody>${L.map(row).join('')}</tbody></table></div></section>`}).join(''):`<div class="empty">${all.length?'沒有符合的紀錄。':'還沒有會勘紀錄，可以在下方新增。'}</div>`}
    <form class="jform" id="svForm" autocomplete="off"><h3 style="margin:0">${SVF.id?'修改會勘紀錄：'+esc(SVF.tool):'新增會勘紀錄'}</h3>
@@ -820,7 +840,38 @@ $('svyView').addEventListener('input',e=>{const m=e.target.id.match(/^sv_(\w+)$/
 $('svyView').addEventListener('change',async e=>{const id=e.target.dataset.svdone;if(!id)return;const done=e.target.checked;e.target.disabled=true;
   try{const r=await call('api/survey/'+id,'PATCH',{done});SVPEND[id]={v:r.item,t:Date.now()};SVY=svApply(SVY);render()}
   catch(err){e.target.disabled=false;e.target.checked=!done;const m=document.querySelector(`[data-svmsg="${CSS.escape(id)}"]`);if(m)m.textContent=err.message}});
+// TUMS Excel 匯入（facility_exhaust 頁）
+function parseTums(wb){const ws=wb.Sheets['facility_exhaust'];if(!ws)throw new Error('找不到 facility_exhaust 工作表');
+  const A=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});const H=(A[0]||[]).map(v=>String(v||'').trim());const ix=n=>H.indexOf(n);
+  const iC=ix('Component')>=0?ix('Component'):2,iF=ix('Function_Type')>=0?ix('Function_Type'):5,iE=ix('Exhaust_ID');
+  const g=(r,n)=>{const i=ix(n);return i<0||r[i]==null?'':String(r[i]).trim()};
+  const spec=[];let tool='',micap='',svy='';
+  for(let i=1;i<A.length;i++){const r=A[i]||[];const sys=r[iF]==null?'':String(r[iF]).trim();
+    if(sys&&/[A-Za-z]/.test(sys)&&(iE<0||r[iE]!=null)){spec.push({sys,pt:r[0]==null?'':String(r[0]).trim(),comp:g(r,'Component'),flow:g(r,'Flow_Peak'),unit:g(r,'Flow_Unit'),size:(g(r,'Connection_SizeOD')+(g(r,'Connection_SizeUnit')==='A'?'A':g(r,'Connection_SizeUnit')?' '+g(r,'Connection_SizeUnit'):'')).trim(),type:g(r,'Connection_Type'),mat:g(r,'Connection_Material'),dir:g(r,'Connection_Location'),pmax:g(r,'Pressure_Max'),pmin:g(r,'Pressure_Min'),vno:g(r,'Vendor_ConnectionNo'),tpoc:g(r,'TPOC_Number'),rmk:g(r,'Remarks')});continue}
+    if(r[iC]!=null&&String(r[iC]).trim())tool=String(r[iC]).trim();
+    if(r[iF]!=null&&/^\d{5,}$/.test(String(r[iF]).trim()))micap=String(r[iF]).trim();
+    if(r[0] instanceof Date)svy=r[0].toLocaleDateString('sv-SE');else if(typeof r[0]==='number'&&r[0]>40000&&r[0]<60000){const d=new Date(Math.round((r[0]-25569)*864e5));svy=d.toISOString().slice(0,10)}}
+  const bd=wb.Sheets['Basic_data']?XLSX.utils.sheet_to_json(wb.Sheets['Basic_data'],{defval:''})[0]||{}:{};
+  if(!micap&&bd.MiCAP_NO)micap=String(bd.MiCAP_NO);
+  let floor='';const fc=wb.Sheets['facility_component']?XLSX.utils.sheet_to_json(wb.Sheets['facility_component'],{defval:''}):[];const mf=fc.find(x=>/Mainframe/i.test(x.Module_Type))||fc[0];if(mf)floor=String(mf.Floor||'');
+  if(!tool)throw new Error('找不到機台名稱（C 欄最下面）');if(!spec.length)throw new Error('找不到 Exhaust 派點資料');
+  return {tool:tool.toUpperCase(),micap,svy,floor,area:bd.Fab?String(bd.Fab):'',spec}}
+let TUMS=null;
+$('svyView').addEventListener('change',async e=>{if(e.target.id!=='tumsFile'||!e.target.files.length)return;const f=e.target.files[0];const pv=$('tumsPrev');pv.innerHTML='<span class="src">讀取中…</span>';
+  try{await loadXLSX();const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});TUMS={...parseTums(wb),file:f.name};const ex=SVY.find(x=>tkey(x.tool)===tkey(TUMS.tool));
+    pv.innerHTML=`<div class="jform" style="margin-top:8px"><h3 style="margin:0">匯入預覽：${esc(TUMS.tool)}${TUMS.micap?' · MICAP '+esc(TUMS.micap):''}</h3>
+      <div class="fields"><label class="f">會勘日期<input type="date" id="tm_svy" value="${esc(TUMS.svy)}"></label><label class="f">ODD<input type="date" id="tm_odd" value="${esc(ex&&ex.odd||'')}"></label><label class="f">分區<input id="tm_grp" value="${esc(ex&&ex.grp||TUMS.floor)}"></label></div>
+      <div class="src">${esc(specSummary(TUMS.spec))}${ex?`　<b>已有這台的會勘紀錄，匯入會更新它的 Exhaust 規格</b>`:''}</div>${specTable(TUMS.spec)}
+      <div class="row"><button type="button" class="btn primary" data-tumsok>${ex?'更新會勘紀錄':'加入會勘紀錄'}</button><button type="button" class="btn" data-tumscancel>取消</button><span class="src" id="tumsMsg"></span></div></div>`}
+  catch(err){pv.innerHTML=`<span class="src" style="color:var(--bad)">讀取失敗：${esc(err.message)}</span>`}e.target.value=''});
 $('svyView').addEventListener('click',async e=>{
+  const sp=e.target.closest('[data-svspec]');if(sp){const id=sp.dataset.svspec;if(SVOPEN.has(id))SVOPEN.delete(id);else SVOPEN.add(id);renderSvy();return}
+  if(e.target.closest('[data-tumscancel]')){TUMS=null;$('tumsPrev').innerHTML='';return}
+  const tk=e.target.closest('[data-tumsok]');if(tk&&TUMS){tk.disabled=true;const ex=SVY.find(x=>tkey(x.tool)===tkey(TUMS.tool));
+    const body={tool:TUMS.tool,micap:TUMS.micap,area:TUMS.area,floor:TUMS.floor,spec:TUMS.spec,src:'TUMS：'+TUMS.file,svy:$('tm_svy').value,odd:$('tm_odd').value,grp:$('tm_grp').value};
+    try{const r=ex?await call('api/survey/'+ex.id,'PATCH',body):await call('api/survey','POST',body);SVPEND[r.item.id]={v:r.item,t:Date.now()};SVY=svApply(SVY);SVOPEN.add(r.item.id);TUMS=null;state.svyF='all';renderSvy();
+      const m=document.querySelector(`[data-svmsg="${CSS.escape(r.item.id)}"]`);if(m)m.textContent=ex?'已更新 Exhaust 規格':'已加入'}
+    catch(err){tk.disabled=false;$('tumsMsg').textContent=err.message}return}
   const f=e.target.closest('[data-svf]');if(f){state.svyF=f.dataset.svf;renderSvy();return}
   const q=e.target.closest('[data-svq]');if(q){state.view='query';state.q=q.dataset.svq;$('q').value=state.q;history.replaceState(null,'','#query');save();render();window.scrollTo({top:0});return}
   const ed=e.target.closest('[data-svedit]');if(ed){const x=SVY.find(y=>y.id===ed.dataset.svedit);if(!x)return;SVF=blankSvy(x);renderSvy();$('svForm').scrollIntoView({behavior:'smooth',block:'start'});return}
