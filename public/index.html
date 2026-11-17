@@ -804,8 +804,28 @@ function renderIsoList(){const {all,list}=isoFiltered();
   const grp=k=>{const L=list.filter(m=>mk(m)===k),pd=L.filter(m=>m.miss).length,op=filt||mOpen(k);
     return `<details class="mgrp" data-m="${k}"${op?' open':''}><summary><b>${ml(k)}</b><span class="count">${L.length} 台${pd?` · 待補圖檔 ${pd}`:' · 圖檔齊全'}</span></summary><div class="jlist"${op?'':' data-lazy="1"'}>${op?L.map(item).join(''):''}</div></details>`};
   ISO_LAZY={list,mk,item};
-  $('isoList').innerHTML=`${filt?`<div class="src">符合 ${list.length} 台（共 ${all.length} 台）</div>`:''}${list.length?`<div class="row" style="gap:6px"><button type="button" class="btn small" data-isoexp="1">全部展開</button><button type="button" class="btn small" data-isoexp="0">全部收合</button></div>${keys.map(grp).join('')}`:`<div class="empty">${all.length?'沒有符合的機台。':'目前沒有已完工的機台。在「每日施工」把裝機排程勾「裝機完成」後，機台會列在這裡。'}</div>`}`}
+  $('isoList').innerHTML=`${filt?`<div class="src">符合 ${list.length} 台（共 ${all.length} 台）</div>`:''}${list.length?`<div class="row" style="gap:6px"><button type="button" class="btn small" data-isoexp="1">全部展開</button><button type="button" class="btn small" data-isoexp="0">全部收合</button><span style="flex:1"></span><button type="button" class="btn small primary" data-isoout="pdf">匯出 PDF</button><button type="button" class="btn small" data-isoout="xlsx">匯出 Excel</button></div>${keys.map(grp).join('')}`:`<div class="empty">${all.length?'沒有符合的機台。':'目前沒有已完工的機台。在「每日施工」把裝機排程勾「裝機完成」後，機台會列在這裡。'}</div>`}`}
 let ISO_LAZY=null;
+// 匯出已完工機台（依目前的搜尋／篩選條件）
+function isoRows(){const {list}=isoFiltered();const mk=m=>String(m.job&&m.job.doneAt||'').slice(0,10);
+  return list.slice().sort((a,b)=>(mk(b)||'0').localeCompare(mk(a)||'0')||a.t.localeCompare(b.t)).map(m=>{const ni=isoFor(m.t,'iso').length,nl=isoFor(m.t,'lego').length;
+    return {date:mk(m),t:m.t,area:m.area||'',floor:m.floor||'',col:m.col||'',vendor:m.vendor||'',by:m.job&&m.job.doneBy||'',iso:ni,lego:nl,st:ni&&nl?'齊全':!ni&&!nl?'待補 ISO、樂高':!ni?'待補 ISO':'待補樂高',appr:m.a?'已核准':'未核准'}})}
+function isoFiltLabel(){const f=[];if(state.isoQ)f.push('搜尋「'+state.isoQ+'」');if(state.isoFrom||state.isoTo)f.push('完工 '+(state.isoFrom||'…')+' ~ '+(state.isoTo||'…'));if((state.isoF||'all')!=='all'){const b=document.querySelector('[data-isof][aria-pressed="true"]');f.push(b?b.innerText.trim():state.isoF)}return f.join('、')}
+async function isoExport(kind,btn){const R=isoRows();if(!R.length)return;const stamp=todayStr();const fname=`已完工機台_${PLANTS[PLANT].replace(/\s/g,'')}_${stamp}`;
+  if(kind==='xlsx'){const old=btn.textContent;btn.disabled=true;btn.textContent='產生中…';try{await loadXLSX();
+      const H=['完工日期','機台','棟別','樓層','柱位','廠商','完成人','ISO 張數','樂高張數','圖檔狀態','點位核准'];
+      const ws=XLSX.utils.aoa_to_sheet([H,...R.map(r=>[r.date||'無',r.t,r.area,r.floor,r.col,r.vendor,r.by,r.iso,r.lego,r.st,r.appr])]);ws['!cols']=[12,16,8,10,8,10,10,8,8,14,9].map(w=>({wch:w}));ws['!autofilter']={ref:ws['!ref']};
+      const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'已完工機台');const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+      const url=URL.createObjectURL(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));const a=document.createElement('a');a.href=url;a.download=fname+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000)}
+    catch(err){alertMsg(err.message)}finally{btn.disabled=false;btn.textContent=old}return}
+  const grp={};for(const r of R){const k=r.date?r.date.slice(0,7):'none';(grp[k]=grp[k]||[]).push(r)}
+  const keys=Object.keys(grp).sort((a,b)=>a==='none'?1:b==='none'?-1:b.localeCompare(a));const fl=isoFiltLabel();
+  const miss=R.filter(r=>r.st!=='齊全').length;
+  const html=`<div class="phead"><h1>毅東工程 Exhaust · 已完工機台</h1><div>${esc(PLANTS[PLANT])} · 共 ${R.length} 台 · 圖檔齊全 ${R.length-miss} · 待補 ${miss}${fl?' · 條件：'+esc(fl):''} · 匯出 ${stamp.replace(/-/g,'/')}</div></div>
+   ${keys.map(k=>{const L=grp[k];const pd=L.filter(r=>r.st!=='齊全').length;return `<section class="psec"><h2>${k==='none'?'無完工日期':`${+k.slice(0,4)} 年 ${+k.slice(5,7)} 月`}<small>${L.length} 台${pd?` · 待補圖檔 ${pd}`:' · 圖檔齊全'}</small></h2><table><thead><tr><th style="width:5em">完工</th><th>機台</th><th>棟別</th><th>樓層</th><th>柱位</th><th>廠商</th><th class="num" style="width:3.2em">ISO</th><th class="num" style="width:3.2em">樂高</th><th>圖檔</th></tr></thead><tbody>${
+     L.map(r=>`<tr><td>${r.date?r.date.slice(5).replace('-','/'):'—'}</td><td class="mono">${esc(r.t)}${r.appr==='未核准'?'<div class="sm">點位未核准</div>':''}</td><td>${esc(r.area)}</td><td>${esc(r.floor)}</td><td>${esc(r.col)}</td><td>${esc(r.vendor)}</td><td class="num">${r.iso||''}</td><td class="num">${r.lego||''}</td><td>${r.st==='齊全'?'齊全':'<b>'+esc(r.st)+'</b>'}</td></tr>`).join('')}</tbody></table></section>`}).join('')}`;
+  let el=$('printArea');if(!el){el=document.createElement('div');el.id='printArea';document.body.appendChild(el)}el.innerHTML=html;
+  const t=document.title;document.title=fname;setTimeout(()=>{window.print();setTimeout(()=>{document.title=t},500)},50)}
 function machBody(m){return `<div class="machbody"><div class="row" style="gap:10px"><button class="btn small" data-goq="${esc(m.t)}">查詢這台機台</button><span class="src">${esc([m.vendor,m.job&&m.job.doneBy?'完成人 '+m.job.doneBy:'',m.job?'完工 '+String(m.job.doneAt||'').slice(0,10):'無裝機排程'].filter(Boolean).join(' · '))}</span></div>
     <section class="iso">${catSec(m.t,'iso',true)}${catSec(m.t,'lego',true)}</section></div>`}
 // 收合中的月份／機台先不產生內容，展開時才補上
@@ -813,6 +833,7 @@ function fillLazy(d){if(!ISO_LAZY)return;
   if(d.matches('details.mgrp')){const j=d.querySelector(':scope>.jlist[data-lazy]');if(j){j.removeAttribute('data-lazy');j.innerHTML=ISO_LAZY.list.filter(m=>ISO_LAZY.mk(m)===d.dataset.m).map(ISO_LAZY.item).join('')}}
   else if(d.matches('details.mach')){const b=d.querySelector(':scope>.machbody[data-lazy]');if(b){const m=ISO_LAZY.list.find(x=>x.k===d.dataset.k);if(m)b.outerHTML=machBody(m)}}}
 $('isoView').addEventListener('toggle',e=>{if(e.target.open)fillLazy(e.target)},true);
+$('isoView').addEventListener('click',e=>{const b=e.target.closest('[data-isoout]');if(b)isoExport(b.dataset.isoout,b)});
 $('isoView').addEventListener('click',e=>{const sm=e.target.closest('summary');if(!sm||e.target.closest('label,button,input,a'))return;const d=sm.parentElement;
   if(d.matches('details.mgrp'))ISO_OPEN.m.set(d.dataset.m,!d.open);else if(d.matches('details.mach')){if(d.open)ISO_OPEN.k.delete(d.dataset.k);else ISO_OPEN.k.add(d.dataset.k)}});
 function renderIso(){const all=doneMachines(),pend=all.filter(m=>m.miss);const f=state.isoF||'all';
