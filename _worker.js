@@ -153,7 +153,7 @@ async function api(req, env, url) {
       items: Array.isArray(b.items) ? b.items.map(x => s(x, 20)).filter(Boolean).slice(0, 8) : [],
       points, note: s(b.note, 300), done: !!b.done, created: new Date().toISOString(),
       // 人員、點工內容與工數
-      crew: cleanCrew(b.crew), work: s(b.work, 60), labor: cleanLabor(b.labor),
+      crewd: cleanCrew(b.crew).length ? { [b.date]: cleanCrew(b.crew) } : {}, work: s(b.work, 60), labor: cleanLabor(b.labor),
     };
     if (job.done) { job.doneAt = new Date().toISOString(); job.doneBy = s(b.by, 30); }
     await putJob(env, job);
@@ -203,7 +203,8 @@ async function api(req, env, url) {
       await setPointGas(env, job, job.done);
     }
     if (edit && !('done' in b) && job.done) await setPointGas(env, job, true);
-    if ('crew' in b) job.crew = cleanCrew(b.crew);
+    // 出工人員（每個施工日各自記錄）
+    if (b.crewd && /^\d{4}-\d{2}-\d{2}$/.test(b.crewd.d || '')) { job.crewd = job.crewd || {}; const c = cleanCrew(b.crewd.names); if (c.length) job.crewd[b.crewd.d] = c; else delete job.crewd[b.crewd.d]; }
     if ('labor' in b) job.labor = cleanLabor(b.labor);
     if ('work' in b) job.work = String(b.work || '').slice(0, 60);
     for (const [k, n] of [['time', 5], ['note', 300], ['area', 10], ['floor', 20], ['col', 20], ['vendor', 30]]) if (k in b) job[k] = String(b[k] || '').slice(0, n);
