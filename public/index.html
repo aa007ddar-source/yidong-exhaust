@@ -408,9 +408,11 @@ try{const s=JSON.parse(localStorage.getItem(SKEY)||'{}');Object.assign(state,{q:
 try{EDIT=sessionStorage.getItem('exq-key')}catch(e){}
 $('q').value=state.q;
 
+async function fetchData(){const r=await fetch('api/data?nobook=1',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();
+  if(!d.book){const b=await fetch('api/book?v='+encodeURIComponent(d.bookv||''));if(!b.ok)throw new Error('族譜 HTTP '+b.status);d.book=(await b.json()).book||[]}SERVER=d;return d}
 async function load(){
   let data=null;
-  try{const r=await fetch('api/data',{cache:'no-store'});if(r.ok){data=await r.json();SERVER=data}}catch(e){}
+  try{data=await fetchData()}catch(e){}
   if(!data&&PLANT==='F16'){try{data=await (await fetch('data.json')).json()}catch(e){}}
   if(!data){$('out').innerHTML='<div class="empty">資料載入失敗，請重新整理頁面。</div>';return}
   D=data;prepare();
@@ -558,7 +560,7 @@ async function call(path,method,body,plant){
   if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
   return j;
 }
-async function reload(){const r=await fetch('api/data',{cache:'no-store'});D=await r.json();SERVER=D;prepare()}
+async function reload(){D=await fetchData();prepare()}
 
 /* ---------- edit mode ---------- */
 function setEdit(on){
@@ -1211,7 +1213,7 @@ document.addEventListener('click',async e=>{const ta=e.target.closest('[data-iso
   try{const r=await call('api/iso/'+mv.dataset.isomv,'PATCH',{c:mv.dataset.c});D.iso[r.id]=r.meta;PEND.iso[r.id]={v:r.meta,t:Date.now()};render();updBadge()}catch(err){mv.disabled=false;mv.textContent='失敗：'+err.message}});
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-isodel]');if(!b)return;if(b.dataset.confirm!=='1'){b.dataset.confirm='1';b.textContent='再按一次確定';return}
   b.disabled=true;try{await call('api/iso/'+b.dataset.isodel,'DELETE');delete D.iso[b.dataset.isodel];PEND.iso[b.dataset.isodel]={v:null,t:Date.now()};render();updBadge()}catch(err){b.disabled=false;b.textContent='失敗：'+err.message}});
-syncBtns();load().then(()=>{if(EDIT)setEdit(true);loadJobs();loadSvy();loadClog()});
+syncBtns();loadJobs();loadSvy();loadClog();load().then(()=>{if(EDIT)setEdit(true);render()});
 </script>
 </body>
 </html>

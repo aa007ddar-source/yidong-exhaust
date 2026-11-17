@@ -32,6 +32,11 @@ async function putPart(env, key, val) {
   await env.DB.put(key, JSON.stringify(val));
 }
 
+function bookVer(meta, env) {
+  const t = JSON.stringify((meta && meta.book) || {}) + '|' + (env.PLANT || '');
+  let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
 async function listMeta(env, prefix) {
   const out = new Map();
   let cursor;
@@ -116,18 +121,29 @@ async function api(req, env, url) {
   const path = url.pathname.replace(/\/+$/, '');
   const method = req.method;
 
+  // 族譜很大（約 1MB）又很少改：分開下載，用版本號讓瀏覽器快取
+  if (path === '/api/book' && method === 'GET') {
+    const meta = await getPart(env, req, 'meta');
+    const cur = bookVer(meta, env);
+    const book = await getPart(env, req, 'book');
+    return new Response(JSON.stringify({ book, v: cur }), { headers: { 'content-type': 'application/json; charset=utf-8',
+      'cache-control': url.searchParams.get('v') === cur ? 'public, max-age=31536000, immutable' : 'no-store' } });
+  }
   if (path === '/api/data' && method === 'GET') {
-    const [appr, book, ovr, meta] = await Promise.all(['appr', 'book', 'ovr', 'meta'].map(k => getPart(env, req, k)));
+    const nobook = url.searchParams.has('nobook');
+    const parts = nobook ? ['appr', 'ovr', 'meta'] : ['appr', 'book', 'ovr', 'meta'];
+    const got = await Promise.all(parts.map(k => getPart(env, req, k)));
+    const P = Object.fromEntries(parts.map((k, i) => [k, got[i]]));
+    const { appr, ovr, meta } = P; const book = P.book || null;
     if (env.DB) {
       // 送氣與族譜修正標記各自存成獨立的 key，避免多人同時修改時互相覆蓋
-      const gas = await listMeta(env, 'gas:');
+      const [gas, ov] = await Promise.all([listMeta(env, 'gas:'), listMeta(env, 'ovr:')]);
       for (const a of appr) if (gas.has(String(a.id))) a.gas = gas.get(String(a.id)).v === 'yes' ? 'yes' : null;
-      const ov = await listMeta(env, 'ovr:');
       for (const [k, m] of ov) { if (m.removed) delete ovr[k]; else ovr[k] = { note: m.note, date: m.date }; }
     }
-    const gasp = env.DB ? Object.fromEntries(await listMeta(env, 'gasp:')) : {};
-    const iso = env.DB ? Object.fromEntries(await listMeta(env, 'iso:')) : {};
-    return J({ appr, book, ovr, meta, gasp, iso, storage: !!env.DB, ai: !!env.AI, edit: !!env.EDIT_PASSWORD });
+    const [gaspM, isoM] = env.DB ? await Promise.all([listMeta(env, 'gasp:'), listMeta(env, 'iso:')]) : [new Map(), new Map()];
+    const gasp = Object.fromEntries(gaspM), iso = Object.fromEntries(isoM);
+    return J({ appr, ...(book ? { book } : { bookv: bookVer(meta, env) }), ovr, meta, gasp, iso, storage: !!env.DB, ai: !!env.AI, edit: !!env.EDIT_PASSWORD });
   }
 
   // 每日施工（送氣排程）：任何人都可以新增、完成、刪除
