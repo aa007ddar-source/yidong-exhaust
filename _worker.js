@@ -212,6 +212,23 @@ async function api(req, env, url) {
     return J({ ok: true, job });
   }
 
+  // 人員名單：兩個廠共用（姓名＋公司）
+  if (path === '/api/roster') {
+    const KV = env.RAWDB || env.DB;
+    if (method === 'GET') return J({ items: (KV && await KV.get('roster', 'json')) || [] });
+    if (method === 'PUT') {
+      const au = authed(req, env);
+      if (au === 'nopass') return J({ error: '尚未在 Cloudflare 設定編輯密碼 EDIT_PASSWORD。' }, 503);
+      if (au !== 'ok') return J({ error: '編輯密碼不正確。' }, 401);
+      if (!KV) return J({ error: '尚未綁定 KV 儲存空間 DB。' }, 503);
+      const b = await req.json();
+      const seen = new Set();
+      const items = (Array.isArray(b.items) ? b.items : []).map(x => ({ n: String(x && x.n || '').trim().slice(0, 20), c: String(x && x.c || '').trim().slice(0, 20) }))
+        .filter(x => x.n && !seen.has(x.n) && seen.add(x.n)).slice(0, 300);
+      await KV.put('roster', JSON.stringify(items));
+      return J({ ok: true, items });
+    }
+  }
   // 點工紀錄（點工、拆機、裝機…的出工人員與工數）：任何人都可以新增、修改、刪除
   if (path === '/api/crewlog' && method === 'GET') {
     if (!env.DB) return J({ items: [] });
@@ -464,7 +481,7 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       try {
         const plant = plantOf(req, url);
-        env = { ...env, PLANT: plant, DB: prefixedKV(env.DB, PLANTS[plant]) };
+        env = { ...env, PLANT: plant, RAWDB: env.DB, DB: prefixedKV(env.DB, PLANTS[plant]) };
         return await api(req, env, url);
       } catch (e) {
         return J({ error: '伺服器錯誤：' + (e && e.message ? e.message : String(e)) }, 500);

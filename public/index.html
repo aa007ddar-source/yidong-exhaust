@@ -88,6 +88,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .cent .what{font-weight:600}.cent .what code{font:600 .88rem var(--mono)}
 .cent .ppl{font-size:.85rem;color:var(--muted)}.cent .ppl b{color:var(--fg);font-weight:500}
 .cent .acts{display:flex;gap:4px;align-items:start}
+.offr{color:var(--bad);text-decoration:underline dotted}
+.pick{display:flex;flex-wrap:wrap;gap:4px}.pick .btn{padding:3px 9px;font-size:.8rem}.pick .btn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .psum{width:100%;border-collapse:collapse;font-size:.85rem}.psum th,.psum td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left}.psum th{font-size:.75rem;color:var(--muted)}
 @media (max-width:560px){.cent{grid-template-columns:minmax(0,1fr) auto}.cent .kind{grid-column:1/-1;justify-self:start}}
 .calhead{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -995,16 +997,19 @@ $('calView').addEventListener('click',e=>{const m=e.target.closest('[data-calm]'
   const d=e.target.closest('[data-calday]');if(d){state.day=d.dataset.calday;FORM.date=state.day;state.view='jobs';history.replaceState(null,'','#jobs');render();window.scrollTo({top:0})}});
 // ── 點工紀錄（獨立於每日施工）
 const KL={labor:'點工',dehook:'拆機',hook:'裝機',gas:'送氣',other:'其他'};
-let CLOG=[];const CLPEND={};let CLF=null;state.clogM=todayStr().slice(0,7);
+let ROSTER_DRAFT='';let CLOG=[];const CLPEND={};let CLF=null;let ROSTER=[];let ROSTER_OPEN=false;
+async function loadRoster(){try{const r=await fetch('api/roster',{cache:'no-store'});if(r.ok)ROSTER=(await r.json()).items||[]}catch(e){}if(state.view==='crew')renderCrew()}
+const rosterSet=()=>new Set(ROSTER.map(x=>x.n));const coOf=n=>(ROSTER.find(x=>x.n===n)||{}).c||'';
+const offRoster=names=>ROSTER.length?names.filter(n=>!rosterSet().has(n)):[];state.clogM=todayStr().slice(0,7);
 const clApply=list=>{const now=Date.now(),m=new Map(list.map(x=>[x.id,x]));for(const[id,p]of Object.entries(CLPEND)){if(now-p.t>PEND_MS){delete CLPEND[id];continue}if(p.v)m.set(id,p.v);else m.delete(id)}return [...m.values()]};
-async function loadClog(){try{const r=await fetch('api/crewlog',{cache:'no-store'});if(r.ok)CLOG=(await r.json()).items||[]}catch(e){}CLOG=clApply(CLOG);if(state.view==='crew')renderCrew()}
+async function loadClog(){if(!ROSTER.length)loadRoster();try{const r=await fetch('api/crewlog',{cache:'no-store'});if(r.ok)CLOG=(await r.json()).items||[]}catch(e){}CLOG=clApply(CLOG);if(state.view==='crew')renderCrew()}
 const blankClog=(o={})=>({id:'',plant:PLANT,date:todayStr(),kind:'labor',tools:'',work:'',crew:'',labor:'',note:'',...o});
 function renderCrew(){if(!CLF)CLF=blankClog();const M=state.clogM;const [Y,Mo]=M.split('-').map(Number);
   const list=CLOG.filter(x=>String(x.date).slice(0,7)===M).sort((a,b)=>b.date.localeCompare(a.date)||String(a.created).localeCompare(String(b.created)));
   const days=[...new Set(list.map(x=>x.date))];const lbAll=list.filter(x=>x.kind==='labor').reduce((t,x)=>t+(+x.labor||0),0);
   const pd={};for(const x of list)for(const n of x.crew||[]){pd[n]=pd[n]||{days:new Set(),labor:0};pd[n].days.add(x.date);if(x.kind==='labor')pd[n].labor++}
   const ent=x=>`<div class="cent"><span class="kind ${x.kind}">${KL[x.kind]||'其他'}</span><div style="min-width:0"><div class="what">${x.kind==='labor'?esc(x.work||'點工'):(x.tools||[]).map(t=>`<code>${esc(t)}</code>`).join('、')||esc(x.work||'')}${x.kind!=='labor'&&x.work?` <span class="src">${esc(x.work)}</span>`:''}${x.labor!=null&&x.kind==='labor'?` <span class="chip isoc">${x.labor} 工</span>`:''}</div>
-     <div class="ppl">${(x.crew||[]).length} 人：<b>${(x.crew||[]).map(esc).join('、')||'—'}</b></div>${x.note?`<div class="src">${esc(x.note)}</div>`:''}<div class="src" data-clmsg="${esc(x.id)}"></div></div>
+     <div class="ppl">${(x.crew||[]).length} 人：<b>${(x.crew||[]).map(n=>ROSTER.length&&!rosterSet().has(n)?`<span class="offr" title="不在人員名單">${esc(n)}</span>`:esc(n)).join('、')||'—'}</b></div>${x.note?`<div class="src">${esc(x.note)}</div>`:''}<div class="src" data-clmsg="${esc(x.id)}"></div></div>
      <div class="acts"><button class="btn small" data-cledit="${esc(x.id)}">修改</button><button class="btn small danger" data-cldel="${esc(x.id)}">刪除</button></div></div>`;
   const day=d=>{const L=list.filter(x=>x.date===d);const ppl=new Set(L.flatMap(x=>x.crew||[]));const lb=L.filter(x=>x.kind==='labor').reduce((t,x)=>t+(+x.labor||0),0);
     return `<section class="cday"><h3>${esc(dayLabel(d))}<span class="count">出工 ${ppl.size} 人${lb?` · 點工 ${lb} 工`:''}</span></h3>${L.map(ent).join('')}</section>`};
@@ -1018,15 +1023,27 @@ function renderCrew(){if(!CLF)CLF=blankClog();const M=state.clogM;const [Y,Mo]=M
     <div class="fields"><label class="f">日期<input type="date" id="cl_date" value="${esc(F.date)}"></label>
      ${F.kind==='labor'?`<label class="f" style="grid-column:span 2">工作內容<input id="cl_work" value="${esc(F.work)}" placeholder="例：司機、送料、推料"></label><label class="f">工數<input id="cl_labor" type="number" min="0" step="0.5" value="${esc(F.labor)}" placeholder="預設＝人數"></label>`
        :`<label class="f" style="grid-column:span 2">機台（多台用頓號分開）<input id="cl_tools" value="${esc(F.tools)}" placeholder="例：TOXDL17200、TOXDL18300" style="font-family:var(--mono);text-transform:uppercase"></label><label class="f">說明（選填）<input id="cl_work" value="${esc(F.work)}"></label>`}</div>
-    <label class="f">出工人員（用頓號或空白分開）<input id="cl_crew" value="${esc(F.crew)}" placeholder="例：陳建文、王承凱、鄭明峻"></label>
+    <label class="f">出工人員（用頓號或空白分開）<input id="cl_crew" value="${esc(F.crew)}" placeholder="例：陳建文、王承凱、鄭名峻"></label>
+    ${ROSTER.length?`<div class="pick">${ROSTER.map(x=>`<button type="button" class="btn small${crewOf(F.crew).includes(x.n)?' on':''}" data-clpick="${esc(x.n)}">${esc(x.n)}</button>`).join('')}</div>`:''}
+    <div class="src" id="clOff" style="color:var(--bad)">${offRoster(crewOf(F.crew)).length?'不在人員名單：'+offRoster(crewOf(F.crew)).map(esc).join('、'):''}</div>
     <label class="f">備註（選填）<input id="cl_note" value="${esc(F.note)}"></label>
     <div class="row"><button type="submit" class="btn primary">${F.id?'儲存修改':'新增紀錄'}</button>${F.id?'<button type="button" class="btn" data-clcancel>取消修改</button>':''}<span class="src" id="clMsg"></span></div></form>
    ${days.length?days.map(day).join(''):`<div class="empty">${Y} 年 ${Mo} 月還沒有點工紀錄。</div>`}
-   ${Object.keys(pd).length?`<details class="cday" style="padding:0"><summary style="padding:8px 12px;cursor:pointer;font-weight:600">本月人員出工統計（${Object.keys(pd).length} 人）</summary><div class="tbl" style="padding:0 12px 10px"><table class="psum"><thead><tr><th>人員</th><th>出工天數</th><th>點工次數</th></tr></thead><tbody>${Object.entries(pd).sort((a,b)=>b[1].days.size-a[1].days.size||a[0].localeCompare(b[0])).map(([n,v])=>`<tr><td>${esc(n)}</td><td>${v.days.size}</td><td>${v.labor||''}</td></tr>`).join('')}</tbody></table></div></details>`:''}
+   ${Object.keys(pd).length?`<details class="cday" style="padding:0"><summary style="padding:8px 12px;cursor:pointer;font-weight:600">本月人員出工統計（${Object.keys(pd).length} 人）</summary><div class="tbl" style="padding:0 12px 10px"><table class="psum"><thead><tr><th>公司</th><th>人員</th><th>出工天數</th><th>點工次數</th></tr></thead><tbody>${Object.entries(pd).sort((a,b)=>coOf(a[0]).localeCompare(coOf(b[0]))||b[1].days.size-a[1].days.size||a[0].localeCompare(b[0])).map(([n,v])=>`<tr><td>${esc(coOf(n)||'—')}</td><td>${ROSTER.length&&!rosterSet().has(n)?`<span class="offr">${esc(n)}</span>`:esc(n)}</td><td>${v.days.size}</td><td>${v.labor||''}</td></tr>`).join('')}</tbody></table></div></details>`:''}
+   <details class="cday" style="padding:0"${ROSTER_OPEN?' open':''}><summary style="padding:8px 12px;cursor:pointer;font-weight:600">人員名單（${ROSTER.length} 人，兩個廠共用）</summary><div style="padding:0 12px 12px">
+    ${ROSTER_OPEN?`<p class="src" style="margin:4px 0">一行一位：「公司 姓名」，例如「常宇 陳建文」；只寫姓名也可以。</p><textarea id="rosterText" rows="10" style="width:100%;font:.9rem var(--sans);padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg)">${esc(ROSTER_DRAFT)}</textarea>
+      <div class="row" style="gap:6px;margin-top:6px"><button type="button" class="btn small primary" data-rostersave>儲存名單</button><button type="button" class="btn small" data-rostercancel>取消</button><span class="src" id="rosterMsg"></span></div>`
+     :`<div class="tbl"><table class="psum"><thead><tr><th>公司</th><th>姓名</th></tr></thead><tbody>${ROSTER.map(x=>`<tr><td>${esc(x.c||'—')}</td><td>${esc(x.n)}</td></tr>`).join('')||'<tr><td colspan="2" class="src">還沒有名單</td></tr>'}</tbody></table></div><button type="button" class="btn small" data-rosteredit style="margin-top:6px">編輯名單</button>`}
+   </div></details>
   </div>`}
-$('crewView').addEventListener('input',e=>{const m=e.target.id.match(/^cl_(\w+)$/);if(m&&CLF)CLF[m[1]]=e.target.value});
+$('crewView').addEventListener('input',e=>{const m=e.target.id.match(/^cl_(\w+)$/);if(m&&CLF){CLF[m[1]]=e.target.value;if(m[1]==='crew'){const o=offRoster(crewOf(CLF.crew));$('clOff').textContent=o.length?'不在人員名單：'+o.join('、'):'';document.querySelectorAll('[data-clpick]').forEach(b=>b.classList.toggle('on',crewOf(CLF.crew).includes(b.dataset.clpick)))}}if(e.target.id==='rosterText')ROSTER_DRAFT=e.target.value});
 $('crewView').addEventListener('click',async e=>{
   const mm=e.target.closest('[data-clm]');if(mm){const n=+mm.dataset.clm;if(!n)state.clogM=todayStr().slice(0,7);else{const d=new Date(state.clogM+'-01T00:00:00');d.setMonth(d.getMonth()+n);state.clogM=d.toLocaleDateString('sv-SE').slice(0,7)}renderCrew();return}
+  const pk=e.target.closest('[data-clpick]');if(pk){const c=crewOf(CLF.crew);const n=pk.dataset.clpick;const i=c.indexOf(n);if(i>=0)c.splice(i,1);else c.push(n);CLF.crew=c.join('、');renderCrew();return}
+  if(e.target.closest('[data-rosteredit]')){ROSTER_OPEN=true;ROSTER_DRAFT=ROSTER.map(x=>(x.c?x.c+' ':'')+x.n).join('\n');renderCrew();return}
+  if(e.target.closest('[data-rostercancel]')){ROSTER_OPEN=false;renderCrew();return}
+  const rs=e.target.closest('[data-rostersave]');if(rs){rs.disabled=true;const items=String(ROSTER_DRAFT||'').split(/\n+/).map(l=>l.trim()).filter(Boolean).map(l=>{const p=l.split(/[\s,，、\t]+/).filter(Boolean);return p.length>1?{c:p[0],n:p[p.length-1]}:{c:'',n:p[0]}});
+    try{const r=await call('api/roster','PUT',{items});ROSTER=r.items;ROSTER_OPEN=false;renderCrew()}catch(err){rs.disabled=false;$('rosterMsg').textContent=err.message}return}
   const pl=e.target.closest('[data-clplant]');if(pl){CLF.plant=pl.dataset.clplant;renderCrew();return}
   const kk=e.target.closest('[data-clkind]');if(kk){CLF.kind=kk.dataset.clkind;renderCrew();return}
   const ed=e.target.closest('[data-cledit]');if(ed){const x=CLOG.find(y=>y.id===ed.dataset.cledit);if(!x)return;CLF=blankClog({id:x.id,date:x.date,kind:x.kind,tools:(x.tools||[]).join('、'),work:x.work||'',crew:(x.crew||[]).join('、'),labor:x.labor==null?'':String(x.labor),note:x.note||''});renderCrew();$('clForm').scrollIntoView({behavior:'smooth',block:'start'});return}
