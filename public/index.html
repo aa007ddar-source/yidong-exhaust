@@ -81,6 +81,15 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 @media (max-width:640px){.cal .ev .evn{display:block;font:.76rem var(--sans);opacity:.85;margin-top:2px}}
 .pleg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.78rem;color:var(--muted)}
 .pleg i{display:inline-block;width:34px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid var(--line)}
+.cday{background:var(--surface);border:1px solid var(--line);border-radius:8px;margin-top:10px;overflow:hidden}
+.cday>h3{margin:0;padding:8px 12px;font-size:.95rem;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}
+.cent{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;padding:8px 12px;border-bottom:1px solid var(--line);align-items:start}
+.cent:last-child{border-bottom:0}
+.cent .what{font-weight:600}.cent .what code{font:600 .88rem var(--mono)}
+.cent .ppl{font-size:.85rem;color:var(--muted)}.cent .ppl b{color:var(--fg);font-weight:500}
+.cent .acts{display:flex;gap:4px;align-items:start}
+.psum{width:100%;border-collapse:collapse;font-size:.85rem}.psum th,.psum td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left}.psum th{font-size:.75rem;color:var(--muted)}
+@media (max-width:560px){.cent{grid-template-columns:minmax(0,1fr) auto}.cent .kind{grid-column:1/-1;justify-self:start}}
 .calhead{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .calhead h2{margin:0;flex:1 1 auto}
 .kleg{display:flex;flex-wrap:wrap;gap:6px}
@@ -298,6 +307,7 @@ details.raw pre{white-space:pre-wrap;font:.76rem/1.5 var(--mono);background:var(
       <button type="button" data-view="jobs">每日施工 <span class="badge" id="jobBadge" hidden></span></button>
       <button type="button" data-view="iso">已完工機台 <span class="badge" id="isoBadge" hidden></span></button>
       <button type="button" data-view="survey">會勘紀錄</button>
+      <button type="button" data-view="crew">點工紀錄</button>
       <button type="button" data-view="query">查詢</button>
     </nav>
     <div id="queryCtl" style="display:grid;gap:10px">
@@ -348,6 +358,7 @@ details.raw pre{white-space:pre-wrap;font:.76rem/1.5 var(--mono);background:var(
   <section id="isoView" hidden></section>
   <section id="svyView" hidden></section>
   <section id="calView" hidden></section>
+  <section id="crewView" hidden></section>
 </div></main>
 
 <div class="modal" id="loginModal" hidden>
@@ -499,12 +510,13 @@ function bookTable(list,Q,title,note){
   <div class="btable tbl"><table><thead><tr><th>Take off 編號</th><th>機台碼</th><th style="text-align:right">TMS-CMM</th><th>頁籤</th></tr></thead><tbody>${rows}</tbody></table>${list.length>LIM?`<div class="more">只顯示前 ${LIM} 筆，請輸入更完整的關鍵字。</div>`:''}</div></section>`}
 const legend=`<div class="legend">${Object.keys(LABEL).map(k=>`<span class="chip ${k}">${LABEL[k]}</span>`).join('')}<span class="chip fixed">人工確認</span><span>待確認點位可按「人工確認吻合」，不需登入。</span></div>`;
 function render(){
-  const jv=state.view==='jobs',iv=state.view==='iso',sv=state.view==='survey',cv=state.view==='cal',ov=jv||iv||sv||cv;$('calView').hidden=!cv;$('jobsView').hidden=!jv;$('isoView').hidden=!iv;$('svyView').hidden=!sv;$('out').hidden=ov;$('queryCtl').hidden=ov;$('editPanel').hidden=ov||!EDIT;
+  const jv=state.view==='jobs',iv=state.view==='iso',sv=state.view==='survey',cv=state.view==='cal',wv=state.view==='crew',ov=jv||iv||sv||cv||wv;$('calView').hidden=!cv;$('crewView').hidden=!wv;$('jobsView').hidden=!jv;$('isoView').hidden=!iv;$('svyView').hidden=!sv;$('out').hidden=ov;$('queryCtl').hidden=ov;$('editPanel').hidden=ov||!EDIT;
   document.querySelectorAll('.tabs button').forEach(b=>{if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   if(jv){renderJobs();return}
   if(iv){renderIso();return}
   if(sv){renderSvy();return}
   if(cv){renderCal();return}
+  if(wv){renderCrew();return}
   const Q=norm(state.q);const out=$('out');$('qClear').hidden=!state.q;
   applyJobState();
   const list=D.appr.concat(D.virt||[]).filter(passFilter);
@@ -706,11 +718,11 @@ const todayStr=()=>new Date().toLocaleDateString('sv-SE');
 const addDays=(d,n)=>{const x=new Date(d+'T00:00:00');x.setDate(x.getDate()+n);return x.toLocaleDateString('sv-SE')};
 const WD=['日','一','二','三','四','五','六'];
 const dayLabel=d=>{const x=new Date(d+'T00:00:00');return `${x.getMonth()+1}/${x.getDate()}（${WD[x.getDay()]}）`};
-const viewOfHash=()=>({'#jobs':'jobs','#iso':'iso','#survey':'survey','#cal':'cal','#query':'query'})[location.hash]||'cal';
+const viewOfHash=()=>({'#jobs':'jobs','#iso':'iso','#survey':'survey','#cal':'cal','#crew':'crew','#query':'query'})[location.hash]||'cal';
 state.view=viewOfHash();state.isoF='all';
 state.day=todayStr();
 let WHO='';try{WHO=localStorage.getItem('exq-who')||''}catch(e){}
-const KIND={hook:'裝機',dehook:'拆機',gas:'送氣',labor:'點工'};const KDONE={hook:'已裝機',dehook:'已拆機',gas:'已送氣',labor:'已完成'};
+const KIND={hook:'裝機',dehook:'拆機',gas:'送氣'};const KDONE={hook:'已裝機',dehook:'已拆機',gas:'已送氣',labor:'已完成'};
 const crewOf=v=>String(v||'').split(/[、,，\s]+/).map(x=>x.trim()).filter(Boolean);
 const crewAt=(j,d)=>((j.crewd||{})[d])||(j.crew&&DAYS(j).length===1?j.crew:[]);
 const ITEMS=['高架作業','動火作業','高架地板','天花板作業','有機溶劑作業'];
@@ -731,7 +743,7 @@ function jobAppr(j){if(!j.tool)return null;return (j.apprId&&D.appr.find(x=>Stri
 function jobCard(j,d){const a=jobAppr(j),kd=j.kind||'gas',ds=DAYS(j),di=d?ds.indexOf(d):-1;const loc=[j.area||(a&&a.a)||'',j.floor,j.col,j.vendor].filter(Boolean);
   return `<div class="job${j.done?' done':''}"><div class="tm">${esc(j.time||'—')}${ds.length>1&&di>=0?`<small style="color:var(--accent);font-weight:600">第 ${di+1}/${ds.length} 天</small>`:''}<small>${esc(j.area||(a&&a.a)||'')}</small></div>
   <div style="min-width:0"><span class="kind ${kd}">${KIND[kd]}</span>${kd==='labor'?`<b class="who">${esc(j.work||'點工')}</b>${j.labor!=null?` <span class="chip isoc">${j.labor} 工</span>`:''}${j.tool?` <button class="pt" data-goq="${esc(j.tool)}">${esc(j.tool)}</button>`:''}`:`<button class="pt who" data-goq="${esc(j.tool)}">${esc(j.tool)}</button>${a?` <span class="src">${esc(a.mod)} · MICAP ${esc(a.m)}</span>`:' <span class="chip unappr">點位未核准</span>'}`}
-   ${(()=>{const cd=d&&ds.includes(d)?d:ds[0];const c=crewAt(j,cd);return c.length?`<div class="crew">${ds.length>1?md(cd)+' ':''}人員 ${c.length} 人：<b>${c.map(esc).join('、')}</b></div>`:''})()}
+
    ${loc.length?`<div class="where" style="font-family:var(--sans)">${loc.map(esc).join(' · ')}${j.items&&j.items.length?'　'+j.items.map(esc).join('、'):''}</div>`:(j.items&&j.items.length?`<div class="where" style="font-family:var(--sans)">${j.items.map(esc).join('、')}</div>`:'')}
    ${j.points&&j.points.length?`<div class="pts">${j.points.map(p=>`<span>${esc(p)}</span>`).join('')}</div>`:(a||kd==='labor'?'':`<div class="where" style="font-family:var(--sans);color:var(--bad)">查無核准截圖，請確認核准後再施工</div>`)}${j.note?`<div class="where" style="font-family:var(--sans)">${esc(j.note)}</div>`:''}
    ${kd==='labor'?'':(()=>{const pd=d&&ds.includes(d)?d:ds[ds.length-1];const v=j.done?100:(j.prog||{})[pd];const cur=pctAt(j,pd);
@@ -739,7 +751,6 @@ function jobCard(j,d){const a=jobAppr(j),kd=j.kind||'gas',ds=DAYS(j),di=d?ds.ind
      ${j.done?'':PSTEPS.map(p=>`<button type="button" class="btn small${v===p?' on':''}" data-jprog="${esc(j.id)}" data-d="${pd}" data-p="${p}">${p}%</button>`).join('')}</div>
      <div class="pnote"><input data-jpn="${esc(j.id)}" data-d="${pd}" value="${esc((j.pnote||{})[pd]||'')}" placeholder="${md(pd)} 進度備註，例：主管完成、等支管材料" aria-label="${md(pd)} 進度備註"><button type="button" class="btn small" data-jpnsave="${esc(j.id)}" data-d="${pd}">儲存備註</button></div>
      ${(()=>{const o=Object.entries(j.pnote||{}).filter(([k])=>k!==pd).sort();return o.length?`<div class="phist">${o.map(([k,t])=>`<div><b>${md(k)}</b>${(j.prog||{})[k]!=null?` ${j.prog[k]}%`:''}：${esc(t)}</div>`).join('')}</div>`:''})()}`})()}
-   ${(()=>{const cd=d&&ds.includes(d)?d:ds[0];return `<div class="pnote"><input data-jcrew="${esc(j.id)}" data-d="${cd}" value="${esc(crewAt(j,cd).join('、'))}" placeholder="${md(cd)} 出工人員，用頓號分開" aria-label="${md(cd)} 出工人員"><button type="button" class="btn small" data-jcrewsave="${esc(j.id)}" data-d="${cd}">儲存人員</button></div>`})()}
    <div class="days">${ds.length>1||!j.done?`<span class="src">施工日</span>${ds.map(x=>`<span class="dchip${x===d?' cur':''}">${md(x)}${ds.length>1&&!j.done?`<button type="button" data-jrmday="${esc(j.id)}" data-d="${x}" aria-label="移除 ${md(x)}">✕</button>`:''}</span>`).join('')}`:''}
     ${j.done?'':`<span class="addday" data-addwrap="${esc(j.id)}"><button type="button" class="btn small" data-jaddask="${esc(j.id)}">＋ 加入工作日</button></span>`}</div>
    ${j.done&&kd==='hook'?(n=>`<div class="row" style="margin-top:6px;gap:6px">${isoUp(j.tool,n.iso?'加傳 ISO 圖':'上傳 ISO 圖','iso')}${isoUp(j.tool,n.lego?'加傳樂高圖':'上傳樂高圖','lego')}<span class="src">${n.iso?`ISO ${n.iso} 張`:'<span class="chip unappr">待匯入 ISO</span>'} ${n.lego?`樂高 ${n.lego} 張`:'<span class="chip unappr">待匯入樂高</span>'}</span><span class="src" data-isomsg="${esc(tkey(j.tool))}"></span></div>`)(fcount(j.tool)):''}
@@ -982,13 +993,61 @@ function renderCal(){const [Y,M]=state.calM.split('-').map(Number);const first=n
 $('calView').addEventListener('click',e=>{const m=e.target.closest('[data-calm]');if(m){const n=+m.dataset.calm;if(!n)state.calM=todayStr().slice(0,7);else{const d=new Date(state.calM+'-01T00:00:00');d.setMonth(d.getMonth()+n);state.calM=d.toLocaleDateString('sv-SE').slice(0,7)}renderCal();return}
   const k=e.target.closest('[data-calk]');if(k){state.calK[k.dataset.calk]=!state.calK[k.dataset.calk];renderCal();return}
   const d=e.target.closest('[data-calday]');if(d){state.day=d.dataset.calday;FORM.date=state.day;state.view='jobs';history.replaceState(null,'','#jobs');render();window.scrollTo({top:0})}});
+// ── 點工紀錄（獨立於每日施工）
+const KL={labor:'點工',dehook:'拆機',hook:'裝機',gas:'送氣',other:'其他'};
+let CLOG=[];const CLPEND={};let CLF=null;state.clogM=todayStr().slice(0,7);
+const clApply=list=>{const now=Date.now(),m=new Map(list.map(x=>[x.id,x]));for(const[id,p]of Object.entries(CLPEND)){if(now-p.t>PEND_MS){delete CLPEND[id];continue}if(p.v)m.set(id,p.v);else m.delete(id)}return [...m.values()]};
+async function loadClog(){try{const r=await fetch('api/crewlog',{cache:'no-store'});if(r.ok)CLOG=(await r.json()).items||[]}catch(e){}CLOG=clApply(CLOG);if(state.view==='crew')renderCrew()}
+const blankClog=(o={})=>({id:'',plant:PLANT,date:todayStr(),kind:'labor',tools:'',work:'',crew:'',labor:'',note:'',...o});
+function renderCrew(){if(!CLF)CLF=blankClog();const M=state.clogM;const [Y,Mo]=M.split('-').map(Number);
+  const list=CLOG.filter(x=>String(x.date).slice(0,7)===M).sort((a,b)=>b.date.localeCompare(a.date)||String(a.created).localeCompare(String(b.created)));
+  const days=[...new Set(list.map(x=>x.date))];const lbAll=list.filter(x=>x.kind==='labor').reduce((t,x)=>t+(+x.labor||0),0);
+  const pd={};for(const x of list)for(const n of x.crew||[]){pd[n]=pd[n]||{days:new Set(),labor:0};pd[n].days.add(x.date);if(x.kind==='labor')pd[n].labor++}
+  const ent=x=>`<div class="cent"><span class="kind ${x.kind}">${KL[x.kind]||'其他'}</span><div style="min-width:0"><div class="what">${x.kind==='labor'?esc(x.work||'點工'):(x.tools||[]).map(t=>`<code>${esc(t)}</code>`).join('、')||esc(x.work||'')}${x.kind!=='labor'&&x.work?` <span class="src">${esc(x.work)}</span>`:''}${x.labor!=null&&x.kind==='labor'?` <span class="chip isoc">${x.labor} 工</span>`:''}</div>
+     <div class="ppl">${(x.crew||[]).length} 人：<b>${(x.crew||[]).map(esc).join('、')||'—'}</b></div>${x.note?`<div class="src">${esc(x.note)}</div>`:''}<div class="src" data-clmsg="${esc(x.id)}"></div></div>
+     <div class="acts"><button class="btn small" data-cledit="${esc(x.id)}">修改</button><button class="btn small danger" data-cldel="${esc(x.id)}">刪除</button></div></div>`;
+  const day=d=>{const L=list.filter(x=>x.date===d);const ppl=new Set(L.flatMap(x=>x.crew||[]));const lb=L.filter(x=>x.kind==='labor').reduce((t,x)=>t+(+x.labor||0),0);
+    return `<section class="cday"><h3>${esc(dayLabel(d))}<span class="count">出工 ${ppl.size} 人${lb?` · 點工 ${lb} 工`:''}</span></h3>${L.map(ent).join('')}</section>`};
+  const F=CLF;
+  $('crewView').innerHTML=`<div class="jobs"><div class="calhead"><h2>點工紀錄 <span class="count">${PLANTS[PLANT]} · ${Y} 年 ${Mo} 月 · ${list.length} 筆 · 出工 ${days.length} 天${lbAll?` · 點工 ${lbAll} 工`:''}</span></h2>
+    <button class="btn small" data-clm="-1">上個月</button><button class="btn small" data-clm="0">本月</button><button class="btn small" data-clm="1">下個月</button></div>
+   <form class="jform" id="clForm" autocomplete="off"><h3 style="margin:0">${F.id?'修改紀錄':'新增紀錄'}</h3>
+    <div class="row" style="gap:10px;flex-wrap:wrap"><span class="src">廠區</span><div class="kseg" role="group" aria-label="廠區">${F.id?`<button type="button" aria-pressed="true">${PLANTS[PLANT]}</button>`:Object.entries(PLANTS).map(([k,v])=>`<button type="button" data-clplant="${k}" aria-pressed="${F.plant===k}">${v}</button>`).join('')}</div>
+     <span class="src">類別</span><div class="kseg" role="group" aria-label="類別">${['labor','dehook','hook','other'].map(k=>`<button type="button" data-clkind="${k}" aria-pressed="${F.kind===k}">${KL[k]}</button>`).join('')}</div></div>
+    ${F.plant!==PLANT?`<div class="warn">這筆會記錄到 <b>${PLANTS[F.plant]}</b>，切換到${PLANTS[F.plant]}才看得到</div>`:''}
+    <div class="fields"><label class="f">日期<input type="date" id="cl_date" value="${esc(F.date)}"></label>
+     ${F.kind==='labor'?`<label class="f" style="grid-column:span 2">工作內容<input id="cl_work" value="${esc(F.work)}" placeholder="例：司機、送料、推料"></label><label class="f">工數<input id="cl_labor" type="number" min="0" step="0.5" value="${esc(F.labor)}" placeholder="預設＝人數"></label>`
+       :`<label class="f" style="grid-column:span 2">機台（多台用頓號分開）<input id="cl_tools" value="${esc(F.tools)}" placeholder="例：TOXDL17200、TOXDL18300" style="font-family:var(--mono);text-transform:uppercase"></label><label class="f">說明（選填）<input id="cl_work" value="${esc(F.work)}"></label>`}</div>
+    <label class="f">出工人員（用頓號或空白分開）<input id="cl_crew" value="${esc(F.crew)}" placeholder="例：陳建文、王承凱、鄭明峻"></label>
+    <label class="f">備註（選填）<input id="cl_note" value="${esc(F.note)}"></label>
+    <div class="row"><button type="submit" class="btn primary">${F.id?'儲存修改':'新增紀錄'}</button>${F.id?'<button type="button" class="btn" data-clcancel>取消修改</button>':''}<span class="src" id="clMsg"></span></div></form>
+   ${days.length?days.map(day).join(''):`<div class="empty">${Y} 年 ${Mo} 月還沒有點工紀錄。</div>`}
+   ${Object.keys(pd).length?`<details class="cday" style="padding:0"><summary style="padding:8px 12px;cursor:pointer;font-weight:600">本月人員出工統計（${Object.keys(pd).length} 人）</summary><div class="tbl" style="padding:0 12px 10px"><table class="psum"><thead><tr><th>人員</th><th>出工天數</th><th>點工次數</th></tr></thead><tbody>${Object.entries(pd).sort((a,b)=>b[1].days.size-a[1].days.size||a[0].localeCompare(b[0])).map(([n,v])=>`<tr><td>${esc(n)}</td><td>${v.days.size}</td><td>${v.labor||''}</td></tr>`).join('')}</tbody></table></div></details>`:''}
+  </div>`}
+$('crewView').addEventListener('input',e=>{const m=e.target.id.match(/^cl_(\w+)$/);if(m&&CLF)CLF[m[1]]=e.target.value});
+$('crewView').addEventListener('click',async e=>{
+  const mm=e.target.closest('[data-clm]');if(mm){const n=+mm.dataset.clm;if(!n)state.clogM=todayStr().slice(0,7);else{const d=new Date(state.clogM+'-01T00:00:00');d.setMonth(d.getMonth()+n);state.clogM=d.toLocaleDateString('sv-SE').slice(0,7)}renderCrew();return}
+  const pl=e.target.closest('[data-clplant]');if(pl){CLF.plant=pl.dataset.clplant;renderCrew();return}
+  const kk=e.target.closest('[data-clkind]');if(kk){CLF.kind=kk.dataset.clkind;renderCrew();return}
+  const ed=e.target.closest('[data-cledit]');if(ed){const x=CLOG.find(y=>y.id===ed.dataset.cledit);if(!x)return;CLF=blankClog({id:x.id,date:x.date,kind:x.kind,tools:(x.tools||[]).join('、'),work:x.work||'',crew:(x.crew||[]).join('、'),labor:x.labor==null?'':String(x.labor),note:x.note||''});renderCrew();$('clForm').scrollIntoView({behavior:'smooth',block:'start'});return}
+  if(e.target.closest('[data-clcancel]')){CLF=blankClog({date:CLF.date});renderCrew();return}
+  const dl=e.target.closest('[data-cldel]');if(dl){const id=dl.dataset.cldel;if(dl.dataset.confirm!=='1'){dl.dataset.confirm='1';dl.textContent='再按一次確定';return}
+    dl.disabled=true;try{await call('api/crewlog/'+id,'DELETE');CLPEND[id]={v:null,t:Date.now()};CLOG=clApply(CLOG);renderCrew()}catch(err){dl.disabled=false;dl.textContent='失敗：'+err.message}}});
+$('crewView').addEventListener('submit',async e=>{e.preventDefault();const F=CLF,msg=$('clMsg');const crew=crewOf(F.crew);
+  if(!F.date){msg.textContent='請選擇日期。';return}if(F.kind==='labor'?!(F.work||crew.length):!(F.tools||F.work)){msg.textContent=F.kind==='labor'?'請填工作內容或人員。':'請填機台。';return}
+  const body={date:F.date,kind:F.kind,tools:F.kind==='labor'?[]:crewOf(F.tools).map(t=>t.toUpperCase()),work:F.work,crew,labor:F.kind==='labor'?(F.labor===''?crew.length:+F.labor):null,note:F.note};
+  const other=!F.id&&F.plant!==PLANT;const btn=e.target.querySelector('[type=submit]');btn.disabled=true;msg.textContent='儲存中…';
+  try{const r=F.id?await call('api/crewlog/'+F.id,'PATCH',body):await call('api/crewlog','POST',body,other?F.plant:'');
+    if(other){CLF=blankClog({date:F.date,kind:F.kind,plant:F.plant});renderCrew();$('clMsg').textContent=`已記錄到${PLANTS[F.plant]}`;return}
+    CLPEND[r.item.id]={v:r.item,t:Date.now()};CLOG=clApply(CLOG);const wasEdit=!!F.id;state.clogM=r.item.date.slice(0,7);CLF=blankClog({date:F.date,kind:F.kind});renderCrew();$('clMsg').textContent=wasEdit?'已修改':'已新增'}
+  catch(err){msg.textContent=err.message;btn.disabled=false}});
 function renderJobs(){
   const d=state.day,list=JOBS.filter(j=>DAYS(j).includes(d)).sort((x,y)=>(x.time||'99').localeCompare(y.time||'99')),done=list.filter(j=>j.done).length;
   const overdue=JOBS.filter(j=>!j.done&&DAYS(j)[DAYS(j).length-1]<todayStr()).sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time));
   const opts=D.appr.filter(a=>!a.old).sort((x,y)=>(GORD[x.gasSt]-GORD[y.gasSt])||x.t.localeCompare(y.t)).map(a=>`<option value="${esc(a.t)}">${esc(a.a)} · ${GASL[a.gasSt]||'未送氣'}</option>`).join('');
   if(!FORM.date)FORM.date=d;
   $('jobsView').innerHTML=`<div class="jobs">
-  <div class="dayrow"><h2>每日施工 <span class="count">${dayLabel(d)}${d===todayStr()?' 今天':''} · ${list.length} 筆 · 完成 ${done}${list.length?'（'+Object.keys(KIND).map(k=>[KIND[k],list.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、')+'）':''}${(()=>{const ppl=new Set(list.flatMap(j=>crewAt(j,d)));const lb=list.filter(j=>j.kind==='labor').reduce((t,j)=>t+(+j.labor||0),0);return ppl.size||lb?` · 出工 ${ppl.size} 人${lb?`（點工 ${lb} 工）`:''}`:''})()}</span></h2>
+  <div class="dayrow"><h2>每日施工 <span class="count">${dayLabel(d)}${d===todayStr()?' 今天':''} · ${list.length} 筆 · 完成 ${done}${list.length?'（'+Object.keys(KIND).map(k=>[KIND[k],list.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、')+'）':''}</span></h2>
    <button class="btn small" data-day="-1">前一天</button><input type="date" id="jobDay" value="${d}" aria-label="選擇日期"><button class="btn small" data-day="1">後一天</button><button class="btn small" data-day="0">今天</button></div>
   <div class="jlist">${list.length?list.map(j=>jobCard(j,d)).join(''):`<div class="empty">${dayLabel(d)} 沒有施工排程，可以在下方新增。</div>`}</div>
   ${overdue.length&&d===todayStr()?`<h2>之前未完成 <span class="count">${overdue.length} 筆</span></h2><div class="jlist">${overdue.map(j=>jobCard({...j,time:md(DAYS(j)[DAYS(j).length-1])+' '+(j.time||'')})).join('')}</div>`:''}
@@ -1002,7 +1061,7 @@ function renderJobs(){
     ${FORM.kind==='labor'?`<label class="f">工作內容<input id="jfWork" value="${esc(FORM.work)}" placeholder="例：司機、送料、推料"></label><label class="f">工數<input id="jfLabor" type="number" min="0" step="0.5" value="${esc(FORM.labor)}" placeholder="預設＝人數"></label>`
       :`<label class="f" style="grid-column:span 2">機台（可搜尋，清單沒有可直接輸入）<input id="jfTool" list="jfTools" value="${esc(FORM.tool)}" placeholder="例：KTINL16700" style="font-family:var(--mono);text-transform:uppercase"></label>`}
    </div>
-   ${FORM.editId?'':`<label class="f">出工人員（用頓號或空白分開）<input id="jfCrew" value="${esc(FORM.crew)}" placeholder="例：陳建文、王承凱、鄭明峻"></label>`}
+
    <datalist id="jfTools">${opts}</datalist>
    ${FORM.kind==='labor'?'':`<div class="fields">
     <label class="f">棟別<input id="jfArea" value="${esc(FORM.area)}" placeholder="A1 / A3-2"></label>
@@ -1073,7 +1132,7 @@ $('jobsView').addEventListener('submit',async e=>{e.preventDefault();const msg=$
   if(FORM.kind==='labor'){if(!FORM.work&&!crew.length){msg.textContent='請填工作內容或人員。';return}}else if(!FORM.tool){msg.textContent='請輸入機台。';return}if(!FORM.date){msg.textContent='請選擇日期。';return}
   if(a&&FORM.kind==='gas'&&(!FORM.pts||!FORM.pts.size)){msg.textContent='請至少勾選一個送氣點位。';return}
   const btn=e.target.querySelector('[type=submit]');btn.disabled=true;msg.textContent='新增中…';
-  const body={kind:FORM.kind,date:FORM.date,time:FORM.time,apprId:a?a.id:'',tool:a?a.t:FORM.tool,area:FORM.area||(a?a.a:''),floor:FORM.floor,col:FORM.col,vendor:FORM.vendor,items:[...FORM.items],points:a&&FORM.pts?[...FORM.pts]:[],note:FORM.note,...(FORM.editId?{}:{crew}),work:FORM.kind==='labor'?FORM.work:'',labor:FORM.kind==='labor'?(FORM.labor===''?crew.length:+FORM.labor):null};
+  const body={kind:FORM.kind,date:FORM.date,time:FORM.time,apprId:a?a.id:'',tool:a?a.t:FORM.tool,area:FORM.area||(a?a.a:''),floor:FORM.floor,col:FORM.col,vendor:FORM.vendor,items:[...FORM.items],points:a&&FORM.pts?[...FORM.pts]:[],note:FORM.note,work:FORM.kind==='labor'?FORM.work:'',labor:FORM.kind==='labor'?(FORM.labor===''?crew.length:+FORM.labor):null};
   if(FORM.kind==='labor')body.tool='';
   try{const old=FORM.editId&&JOBS.find(x=>x.id===FORM.editId);const r=FORM.editId?await call('api/jobs/'+FORM.editId,'PATCH',body):await call('api/jobs','POST',body,other?FORM.plant:'');
     if(other){const pl=FORM.plant;FORM=blankForm({kind:FORM.kind,date:FORM.date,vendor:FORM.vendor,plant:pl});renderJobs();const m=$('jfMsg');if(m)m.textContent=`已記錄到${PLANTS[pl]}：${KIND[r.job.kind]} ${r.job.tool||r.job.work||''}`;return}
@@ -1087,7 +1146,7 @@ $('jobsView').addEventListener('submit',async e=>{e.preventDefault();const msg=$
 function clearQ(){state.q='';$('q').value='';save();render();window.scrollTo({top:0})}
 $('qClear').addEventListener('click',()=>{clearQ();$('q').focus()});
 document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(!b)return;if(b.dataset.view==='query'){state.q='';$('q').value='';save()}state.view=b.dataset.view;
-  if(state.view!=='query'){history.replaceState(null,'','#'+state.view);loadJobs();if(state.view==='survey')loadSvy()}else history.replaceState(null,'','#query');render();window.scrollTo({top:0})});
+  if(state.view!=='query'){history.replaceState(null,'','#'+state.view);loadJobs();if(state.view==='survey')loadSvy();if(state.view==='crew')loadClog()}else history.replaceState(null,'','#query');render();window.scrollTo({top:0})});
 window.addEventListener('hashchange',()=>{state.view=viewOfHash();render()});
 $('out').addEventListener('click',e=>{const gj=e.target.closest('[data-gojobs]');if(gj){state.view='jobs';state.day=gj.dataset.gojobs;FORM.date=state.day;history.replaceState(null,'','#jobs');render();window.scrollTo({top:0});return}
   const s=e.target.closest('[data-sched]');if(!s)return;const a=D.appr.find(x=>String(x.id)===s.dataset.sched);if(!a)return;
@@ -1112,7 +1171,7 @@ document.addEventListener('click',async e=>{const ta=e.target.closest('[data-iso
   try{const r=await call('api/iso/'+mv.dataset.isomv,'PATCH',{c:mv.dataset.c});D.iso[r.id]=r.meta;PEND.iso[r.id]={v:r.meta,t:Date.now()};render();updBadge()}catch(err){mv.disabled=false;mv.textContent='失敗：'+err.message}});
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-isodel]');if(!b)return;if(b.dataset.confirm!=='1'){b.dataset.confirm='1';b.textContent='再按一次確定';return}
   b.disabled=true;try{await call('api/iso/'+b.dataset.isodel,'DELETE');delete D.iso[b.dataset.isodel];PEND.iso[b.dataset.isodel]={v:null,t:Date.now()};render();updBadge()}catch(err){b.disabled=false;b.textContent='失敗：'+err.message}});
-syncBtns();load().then(()=>{if(EDIT)setEdit(true);loadJobs();loadSvy()});
+syncBtns();load().then(()=>{if(EDIT)setEdit(true);loadJobs();loadSvy();loadClog()});
 </script>
 </body>
 </html>

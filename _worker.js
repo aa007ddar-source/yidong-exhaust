@@ -212,6 +212,48 @@ async function api(req, env, url) {
     return J({ ok: true, job });
   }
 
+  // 點工紀錄（點工、拆機、裝機…的出工人員與工數）：任何人都可以新增、修改、刪除
+  if (path === '/api/crewlog' && method === 'GET') {
+    if (!env.DB) return J({ items: [] });
+    const list = await listMeta(env, 'clog:');
+    const items = (await Promise.all([...list.keys()].map(id => env.DB.get('clog:' + id, 'json')))).filter(Boolean);
+    return J({ items });
+  }
+  const clm = path.match(/^\/api\/crewlog(?:\/([\w-]+))?$/);
+  if (clm && ['POST', 'PATCH', 'DELETE'].includes(method)) {
+    if (!env.DB) return J({ error: '尚未綁定 KV 儲存空間 DB。' }, 503);
+    const S = (v, n) => String(v || '').slice(0, n);
+    const clean = (b, o = {}) => {
+      if ('date' in b && /^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) o.date = b.date;
+      if ('kind' in b) o.kind = ['labor', 'dehook', 'hook', 'gas', 'other'].includes(b.kind) ? b.kind : 'other';
+      if ('tools' in b) o.tools = (Array.isArray(b.tools) ? b.tools : String(b.tools || '').split(/[、,，\s]+/)).map(x => S(x, 40).trim().toUpperCase()).filter(Boolean).slice(0, 30);
+      if ('work' in b) o.work = S(b.work, 80);
+      if ('crew' in b) o.crew = cleanCrew(b.crew);
+      if ('labor' in b) o.labor = cleanLabor(b.labor);
+      if ('note' in b) o.note = S(b.note, 200);
+      return o;
+    };
+    if (method === 'POST' && !clm[1]) {
+      const b = await req.json();
+      const out = [];
+      for (const it of (Array.isArray(b.items) ? b.items : [b]).slice(0, 50)) {
+        const o = clean(it, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), kind: 'other', tools: [], work: '', crew: [], labor: null, note: '', created: new Date().toISOString() });
+        if (!o.date) return J({ error: '請選擇日期。' }, 400);
+        await env.DB.put('clog:' + o.id, JSON.stringify(o), { metadata: { d: o.date } });
+        out.push(o);
+      }
+      return J({ ok: true, item: out[0], items: out });
+    }
+    if (!clm[1]) return J({ error: 'not found' }, 404);
+    const cur = await env.DB.get('clog:' + clm[1], 'json');
+    if (!cur) return J({ error: '找不到這筆紀錄，可能已被刪除。' }, 404);
+    if (method === 'DELETE') { await env.DB.delete('clog:' + clm[1]); return J({ ok: true }); }
+    const o = clean(await req.json(), cur);
+    o.updated = new Date().toISOString();
+    await env.DB.put('clog:' + o.id, JSON.stringify(o), { metadata: { d: o.date } });
+    return J({ ok: true, item: o });
+  }
+
   // 機台會勘紀錄：任何人都可以新增、修改、刪除
   if (path === '/api/survey' && method === 'GET') {
     if (!env.DB) return J({ items: [] });
