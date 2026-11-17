@@ -289,7 +289,7 @@ main .wrap>*,#out>*,section,.card,.panel,.tool,.queue{min-width:0}
 .qitem.zoom{grid-template-columns:1fr}.qitem.zoom .qimg{border-right:0;border-bottom:1px solid var(--line)}
 .qitem .qform{padding:12px;display:grid;gap:8px;min-width:0}
 .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
-label.f{display:grid;gap:3px;font-size:.76rem;color:var(--muted)}
+label.f,.f.cldate{display:grid;gap:3px;font-size:.76rem;color:var(--muted)}.f.cldate{grid-column:span 2}.f.cldate input{font-size:.9rem;color:var(--fg)}.f.cldate .kseg button{white-space:nowrap}
 label.f input,label.f textarea{font-size:.9rem;color:var(--fg)}
 textarea.pts{font-family:var(--mono);font-size:.82rem;min-height:120px;resize:vertical}
 details.raw summary{font-size:.78rem;color:var(--muted);cursor:pointer}
@@ -1056,10 +1056,10 @@ function renderCrew(){if(!CLF)CLF=blankClog();const M=state.clogM;const [Y,Mo]=M
   $('crewView').innerHTML=`<div class="jobs"><div class="calhead"><h2>點工紀錄 <span class="count">${PLANTS[PLANT]} · ${Y} 年 ${Mo} 月 · ${list.length} 筆 · 出工 ${days.length} 天${lbAll?` · 點工 ${lbAll} 工`:''}</span></h2>
     <button class="btn small" data-clm="-1">上個月</button><button class="btn small" data-clm="0">本月</button><button class="btn small" data-clm="1">下個月</button><button class="btn small primary" data-clpdf${list.length?'':' disabled'}>匯出 PDF</button></div>
    <form class="jform" id="clForm" autocomplete="off"><h3 style="margin:0">${F.id?'修改紀錄':'新增紀錄'}</h3>
-    <div class="row" style="gap:10px;flex-wrap:wrap"><span class="src">廠區</span><div class="kseg" role="group" aria-label="廠區">${F.id?`<button type="button" aria-pressed="true">${PLANTS[PLANT]}</button>`:Object.entries(PLANTS).map(([k,v])=>`<button type="button" data-clplant="${k}" aria-pressed="${F.plant===k}">${v}</button>`).join('')}</div>
-     <span class="src">類別</span><div class="kseg" role="group" aria-label="類別">${['labor','dehook','hook','other'].map(k=>`<button type="button" data-clkind="${k}" aria-pressed="${F.kind===k}">${KL[k]}</button>`).join('')}</div></div>
+    <div class="row" style="gap:10px;flex-wrap:wrap"><span class="src">類別</span><div class="kseg" role="group" aria-label="類別">${['labor','dehook','hook','other'].map(k=>`<button type="button" data-clkind="${k}" aria-pressed="${F.kind===k}">${KL[k]}</button>`).join('')}</div></div>
     ${F.plant!==PLANT?`<div class="warn">這筆會記錄到 <b>${PLANTS[F.plant]}</b>，切換到${PLANTS[F.plant]}才看得到</div>`:''}
-    <div class="fields"><label class="f">日期<input type="date" id="cl_date" value="${esc(F.date)}"></label>
+    <div class="fields"><div class="f cldate"><span>日期／廠區</span><div class="row" style="gap:6px;flex-wrap:nowrap"><input type="date" id="cl_date" value="${esc(F.date)}" aria-label="日期" style="flex:1;min-width:0">
+      <div class="kseg" role="group" aria-label="廠區">${F.id?`<button type="button" aria-pressed="true">${PLANTS[PLANT]}</button>`:Object.entries(PLANTS).map(([k,v])=>`<button type="button" data-clplant="${k}" aria-pressed="${F.plant===k}">${v.replace('后里 ','')}</button>`).join('')}</div></div></div>
      ${F.kind==='labor'?`<label class="f" style="grid-column:span 2">工作內容<input id="cl_work" value="${esc(F.work)}" placeholder="例：司機、送料、推料"></label><label class="f">工數<input id="cl_labor" type="number" min="0" step="0.5" value="${esc(F.labor)}" placeholder="預設＝人數"></label>`
        :`<label class="f" style="grid-column:span 2">機台（多台用頓號分開）<input id="cl_tools" value="${esc(F.tools)}" placeholder="例：TOXDL17200、TOXDL18300" style="font-family:var(--mono);text-transform:uppercase"></label><label class="f">說明（選填）<input id="cl_work" value="${esc(F.work)}"></label>`}</div>
     <label class="f">出工人員（用頓號或空白分開）<input id="cl_crew" value="${esc(F.crew)}" placeholder="例：陳建文、王承凱、鄭名峻"></label>
