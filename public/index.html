@@ -88,7 +88,10 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .cent .what{font-weight:600}.cent .what code{font:600 .88rem var(--mono)}
 .cent .ppl{font-size:.85rem;color:var(--muted)}.cent .ppl b{color:var(--fg);font-weight:500}
 .cent .acts{display:flex;gap:4px;align-items:start}
-.offr{}#printArea{display:none}
+.offr{}
+.odday{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin:0 0 8px}.odday>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:10px 12px;cursor:pointer;list-style:none}
+.odday>summary::-webkit-details-marker{display:none}.odday>summary::before{content:'▸';color:var(--muted)}.odday[open]>summary::before{content:'▾'}
+.odday .odtools{font-family:var(--mono);font-size:.8rem;color:var(--muted);flex-basis:100%;padding-left:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.odday>.jlist{padding:0 10px 10px}.odday>.jlist:empty{display:none}#printArea{display:none}
 @media print{body>*:not(#printArea){display:none!important}#printArea{display:block;color:#000;font:10.5pt/1.45 "Noto Sans TC",system-ui,sans-serif}
  @page{size:A4;margin:12mm}
  #printArea .phead{border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:10px}#printArea h1{font-size:15pt;margin:0}
@@ -1095,6 +1098,9 @@ $('crewView').addEventListener('submit',async e=>{e.preventDefault();const F=CLF
     if(other){CLF=blankClog({date:F.date,kind:F.kind,plant:F.plant});renderCrew();$('clMsg').textContent=`已記錄到${PLANTS[F.plant]}`;return}
     CLPEND[r.item.id]={v:r.item,t:Date.now()};CLOG=clApply(CLOG);const wasEdit=!!F.id;state.clogM=r.item.date.slice(0,7);CLF=blankClog({date:F.date,kind:F.kind});renderCrew();$('clMsg').textContent=wasEdit?'已修改':'已新增'}
   catch(err){msg.textContent=err.message;btn.disabled=false}});
+const JOB_OPEN=new Set();
+$('jobsView').addEventListener('toggle',e=>{const dd=e.target;if(!dd.matches||!dd.matches('details.odday'))return;const od=dd.dataset.od;
+  if(dd.open){JOB_OPEN.add(od);const jl=dd.querySelector(':scope>.jlist');if(jl&&!jl.children.length){const last=j=>DAYS(j)[DAYS(j).length-1];jl.innerHTML=JOBS.filter(j=>!j.done&&last(j)===od).sort((x,y)=>(x.time||'99').localeCompare(y.time||'99')).map(j=>jobCard({...j,time:md(od)+' '+(j.time||'')})).join('')}}else JOB_OPEN.delete(od)},true);
 function renderJobs(){
   const d=state.day,list=JOBS.filter(j=>DAYS(j).includes(d)).sort((x,y)=>(x.time||'99').localeCompare(y.time||'99')),done=list.filter(j=>j.done).length;
   const overdue=JOBS.filter(j=>!j.done&&DAYS(j)[DAYS(j).length-1]<todayStr()).sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time));
@@ -1104,7 +1110,10 @@ function renderJobs(){
   <div class="dayrow"><h2>每日施工 <span class="count">${dayLabel(d)}${d===todayStr()?' 今天':''} · ${list.length} 筆 · 完成 ${done}${list.length?'（'+Object.keys(KIND).map(k=>[KIND[k],list.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、')+'）':''}</span></h2>
    <button class="btn small" data-day="-1">前一天</button><input type="date" id="jobDay" value="${d}" aria-label="選擇日期"><button class="btn small" data-day="1">後一天</button><button class="btn small" data-day="0">今天</button></div>
   <div class="jlist">${list.length?list.map(j=>jobCard(j,d)).join(''):`<div class="empty">${dayLabel(d)} 沒有施工排程，可以在下方新增。</div>`}</div>
-  ${overdue.length&&d===todayStr()?`<h2>之前未完成 <span class="count">${overdue.length} 筆</span></h2><div class="jlist">${overdue.map(j=>jobCard({...j,time:md(DAYS(j)[DAYS(j).length-1])+' '+(j.time||'')})).join('')}</div>`:''}
+  ${overdue.length&&d===todayStr()?(()=>{const last=j=>DAYS(j)[DAYS(j).length-1];const ods=[...new Set(overdue.map(last))].sort().reverse();
+    return `<h2>之前未完成 <span class="count">${overdue.length} 筆 · ${ods.length} 天（點日期展開）</span></h2>${ods.map(od=>{const L=overdue.filter(j=>last(j)===od);const op=JOB_OPEN.has(od);
+      const kc=Object.keys(KIND).map(k=>[KIND[k],L.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、');
+      return `<details class="odday" data-od="${od}"${op?' open':''}><summary><b>${esc(dayLabel(od))}</b><span class="count">${L.length} 筆${kc?' · '+kc:''}</span><span class="odtools">${L.map(j=>esc(j.tool||j.work||'')).filter(Boolean).slice(0,4).join('、')}${L.length>4?'…':''}</span></summary><div class="jlist">${op?L.map(j=>jobCard({...j,time:md(od)+' '+(j.time||'')})).join(''):''}</div></details>`}).join('')}`})():''}
   <form class="jform" id="jobForm" autocomplete="off"><h3 style="margin:0">${FORM.editId?'修改排程：'+esc(FORM.editTool||FORM.tool):'新增施工排程'}</h3>
    <div class="row" style="gap:10px;flex-wrap:wrap"><span class="src">廠區</span><div class="kseg" role="group" aria-label="記錄到哪個廠">${FORM.editId?`<button type="button" aria-pressed="true">${PLANTS[PLANT]}</button>`:Object.entries(PLANTS).map(([k,v])=>`<button type="button" data-fplant="${k}" aria-pressed="${FORM.plant===k}">${v}</button>`).join('')}</div>
     <span class="src">類別</span><div class="kseg" role="group" aria-label="施工類別">${Object.entries(KIND).map(([k,v])=>`<button type="button" data-kind="${k}" aria-pressed="${FORM.kind===k}">${v}</button>`).join('')}</div></div>
