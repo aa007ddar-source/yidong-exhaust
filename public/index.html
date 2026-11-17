@@ -467,7 +467,11 @@ function applyJobState(){
 const DAYS=j=>j.days&&j.days.length?j.days:[j.date];const md=d=>d.slice(5).replace('-','/');
 const tkey=t=>norm(t).replace(/\(.*$/,'');
 const CATL={iso:'ISO 圖',lego:'樂高圖'};
-function isoFor(t,c){const k=tkey(t);return Object.entries(D.iso||{}).filter(([,m])=>tkey(m.t)===k&&(!c||(m.c||'iso')===c)).map(([id,m])=>({id,...m})).sort((x,y)=>String(x.at).localeCompare(String(y.at)))}
+// 圖檔索引：同一次畫面更新內共用，避免每台機台都把全部圖檔掃一遍
+let ISOIDX=null;
+function isoIdx(){if(ISOIDX)return ISOIDX;const m=new Map();for(const [id,v] of Object.entries(D.iso||{})){const k=tkey(v.t);let a=m.get(k);if(!a)m.set(k,a=[]);a.push({id,...v})}
+  for(const a of m.values())a.sort((x,y)=>String(x.at).localeCompare(String(y.at)));ISOIDX=m;setTimeout(()=>{ISOIDX=null},0);return m}
+function isoFor(t,c){const L=isoIdx().get(tkey(t))||[];return c?L.filter(m=>(m.c||'iso')===c):L.slice()}
 const fsz=n=>n>1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
 function isoItem(f){const u='api/iso/'+f.id+PQ,img=/^image\//.test(f.y||'');
   return `<div class="isoit">${img?`<a href="${u}" target="_blank" rel="noopener"><img src="${u}" loading="lazy" alt="${esc(f.n)}"></a>`:`<a class="isodoc" href="${u}" target="_blank" rel="noopener">${esc((String(f.n).split('.').pop()||'檔').toUpperCase().slice(0,4))}</a>`}
@@ -790,13 +794,21 @@ function renderIsoList(){const {all,list}=isoFiltered();
   const keys=[...new Set(list.map(mk))].sort((a,b)=>a==='none'?1:b==='none'?-1:b.localeCompare(a));
   const mOpen=k=>ISO_OPEN.m.has(k)?ISO_OPEN.m.get(k):k===keys[0];
   const ml=k=>k==='none'?'無完工日期':`${+k.slice(0,4)} 年 ${+k.slice(5,7)} 月`;
-  const item=m=>`<details class="mach" data-k="${esc(m.k)}"${filt&&state.isoQ||ISO_OPEN.k.has(m.k)?' open':''}><summary><span class="id">${esc(m.t)}</span>${fchips(m.t,true)}${m.a?'':' <span class="chip unappr">點位未核准</span>'}
+  const item=m=>{const op=filt&&state.isoQ||ISO_OPEN.k.has(m.k);return `<details class="mach" data-k="${esc(m.k)}"${op?' open':''}><summary><span class="id">${esc(m.t)}</span>${fchips(m.t,true)}${m.a?'':' <span class="chip unappr">點位未核准</span>'}
      <span class="kv">${esc([m.area,m.floor,m.col].filter(Boolean).join(' · ')||'—')}</span>${m.job?`<span class="kv">完工 <b>${esc(String(m.job.doneAt||'').slice(5,10).replace('-','/'))}</b></span>`:''}<span class="src" data-isomsg="${esc(m.k)}"></span></summary>
-    <div class="machbody"><div class="row" style="gap:10px"><button class="btn small" data-goq="${esc(m.t)}">查詢這台機台</button><span class="src">${esc([m.vendor,m.job&&m.job.doneBy?'完成人 '+m.job.doneBy:'',m.job?'完工 '+String(m.job.doneAt||'').slice(0,10):'無裝機排程'].filter(Boolean).join(' · '))}</span></div>
-    <section class="iso">${catSec(m.t,'iso',true)}${catSec(m.t,'lego',true)}</section></div></details>`;
-  const grp=k=>{const L=list.filter(m=>mk(m)===k),pd=L.filter(m=>m.miss).length;
-    return `<details class="mgrp" data-m="${k}"${filt||mOpen(k)?' open':''}><summary><b>${ml(k)}</b><span class="count">${L.length} 台${pd?` · 待補圖檔 ${pd}`:' · 圖檔齊全'}</span></summary><div class="jlist">${L.map(item).join('')}</div></details>`};
+    ${op?machBody(m):'<div class="machbody" data-lazy="1"></div>'}</details>`};
+  const grp=k=>{const L=list.filter(m=>mk(m)===k),pd=L.filter(m=>m.miss).length,op=filt||mOpen(k);
+    return `<details class="mgrp" data-m="${k}"${op?' open':''}><summary><b>${ml(k)}</b><span class="count">${L.length} 台${pd?` · 待補圖檔 ${pd}`:' · 圖檔齊全'}</span></summary><div class="jlist"${op?'':' data-lazy="1"'}>${op?L.map(item).join(''):''}</div></details>`};
+  ISO_LAZY={list,mk,item};
   $('isoList').innerHTML=`${filt?`<div class="src">符合 ${list.length} 台（共 ${all.length} 台）</div>`:''}${list.length?`<div class="row" style="gap:6px"><button type="button" class="btn small" data-isoexp="1">全部展開</button><button type="button" class="btn small" data-isoexp="0">全部收合</button></div>${keys.map(grp).join('')}`:`<div class="empty">${all.length?'沒有符合的機台。':'目前沒有已完工的機台。在「每日施工」把裝機排程勾「裝機完成」後，機台會列在這裡。'}</div>`}`}
+let ISO_LAZY=null;
+function machBody(m){return `<div class="machbody"><div class="row" style="gap:10px"><button class="btn small" data-goq="${esc(m.t)}">查詢這台機台</button><span class="src">${esc([m.vendor,m.job&&m.job.doneBy?'完成人 '+m.job.doneBy:'',m.job?'完工 '+String(m.job.doneAt||'').slice(0,10):'無裝機排程'].filter(Boolean).join(' · '))}</span></div>
+    <section class="iso">${catSec(m.t,'iso',true)}${catSec(m.t,'lego',true)}</section></div>`}
+// 收合中的月份／機台先不產生內容，展開時才補上
+function fillLazy(d){if(!ISO_LAZY)return;
+  if(d.matches('details.mgrp')){const j=d.querySelector(':scope>.jlist[data-lazy]');if(j){j.removeAttribute('data-lazy');j.innerHTML=ISO_LAZY.list.filter(m=>ISO_LAZY.mk(m)===d.dataset.m).map(ISO_LAZY.item).join('')}}
+  else if(d.matches('details.mach')){const b=d.querySelector(':scope>.machbody[data-lazy]');if(b){const m=ISO_LAZY.list.find(x=>x.k===d.dataset.k);if(m)b.outerHTML=machBody(m)}}}
+$('isoView').addEventListener('toggle',e=>{if(e.target.open)fillLazy(e.target)},true);
 $('isoView').addEventListener('click',e=>{const sm=e.target.closest('summary');if(!sm||e.target.closest('label,button,input,a'))return;const d=sm.parentElement;
   if(d.matches('details.mgrp'))ISO_OPEN.m.set(d.dataset.m,!d.open);else if(d.matches('details.mach')){if(d.open)ISO_OPEN.k.delete(d.dataset.k);else ISO_OPEN.k.add(d.dataset.k)}});
 function renderIso(){const all=doneMachines(),pend=all.filter(m=>m.miss);const f=state.isoF||'all';
@@ -811,7 +823,7 @@ function renderIso(){const all=doneMachines(),pend=all.filter(m=>m.miss);const f
    <div id="isoList"></div></div>`;renderIsoList()}
 $('isoView').addEventListener('input',e=>{const id=e.target.id;if(id==='isoQ')state.isoQ=e.target.value.trim();else if(id==='isoFrom')state.isoFrom=e.target.value;else if(id==='isoTo')state.isoTo=e.target.value;else return;renderIsoList()});
 $('isoView').addEventListener('click',e=>{const b=e.target.closest('[data-isof]');if(b){state.isoF=b.dataset.isof;renderIso();return}
-  const ex=e.target.closest('[data-isoexp]');if(ex){const o=ex.dataset.isoexp==='1';document.querySelectorAll('#isoList details').forEach(d=>{d.open=o;if(d.matches('.mgrp'))ISO_OPEN.m.set(d.dataset.m,o);else if(o)ISO_OPEN.k.add(d.dataset.k);else ISO_OPEN.k.delete(d.dataset.k)});return}
+  const ex=e.target.closest('[data-isoexp]');if(ex){const o=ex.dataset.isoexp==='1';if(o)document.querySelectorAll('#isoList details.mgrp').forEach(fillLazy);document.querySelectorAll('#isoList details').forEach(d=>{d.open=o;if(d.matches('.mgrp'))ISO_OPEN.m.set(d.dataset.m,o);else if(o)ISO_OPEN.k.add(d.dataset.k);else ISO_OPEN.k.delete(d.dataset.k)});return}
   const rg=e.target.closest('[data-isorange]');if(rg){const v=rg.dataset.isorange,t=todayStr();if(v==='clear'){state.isoQ='';state.isoFrom='';state.isoTo=''}else if(v==='month'){state.isoFrom=t.slice(0,8)+'01';state.isoTo=t}else{state.isoFrom=addDays(t,-(+v-1));state.isoTo=t}renderIso();return}
   const gq=e.target.closest('[data-goq]');if(gq){state.view='query';state.q=gq.dataset.goq;$('q').value=state.q;history.replaceState(null,'','#query');save();render();window.scrollTo({top:0})}});
 // 機台會勘紀錄
