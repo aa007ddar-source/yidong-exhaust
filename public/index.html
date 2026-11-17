@@ -96,6 +96,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .cal .dn small{font:.7rem var(--sans);color:var(--muted);margin-left:4px;display:none}
 .cal .ev{display:block;width:100%;text-align:left;border:0;border-left:3px solid;border-radius:3px;padding:2px 5px;font:.72rem/1.25 var(--mono);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}
 .ev.hook,.kdot.hook{border-color:#2563eb;background:#dbeafe}.kdot.hook{background:#2563eb}
+.ev.labor,.kdot.labor{border-color:#7c3aed;background:#ede9fe}.kdot.labor{background:#7c3aed}
 .ev.dehook,.kdot.dehook{border-color:#b45309;background:#fef3c7}.kdot.dehook{background:#b45309}
 .ev.gas,.kdot.gas{border-color:#15803d;background:#dcfce7}.kdot.gas{background:#15803d}
 .cal .ev.done{opacity:.75}
@@ -169,7 +170,8 @@ table.spect th{font-size:.72rem;color:var(--muted)}
 .addday{display:inline-flex;gap:4px;align-items:center}
 .addday input{padding:3px 6px;font-size:.8rem}
 .kind{display:inline-block;font:600 .74rem var(--sans);padding:1px 8px;border-radius:4px;margin-right:6px;vertical-align:2px;border:1px solid currentColor}
-.kind.hook{color:#2563eb}.kind.dehook{color:#b45309}.kind.gas{color:var(--accent)}
+.kind.hook{color:#2563eb}.kind.dehook{color:#b45309}.kind.gas{color:var(--accent)}.kind.labor{color:#7c3aed}
+.crew{font:.82rem var(--sans);color:var(--muted);margin-top:3px}.crew b{color:var(--fg);font-weight:600}
 .chip.unappr{background:transparent;color:var(--bad);border:1px solid var(--bad)}
 .kseg{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .kseg button{border:0;border-right:1px solid var(--line);background:var(--surface);padding:7px 16px;font:600 .88rem var(--sans);color:var(--fg);cursor:pointer}
@@ -366,7 +368,7 @@ const PLANT=(()=>{let p=new URLSearchParams(location.search).get('plant');if(!p)
 try{localStorage.setItem('exq-plant',PLANT)}catch(e){}
 const PQ=PLANT==='F16'?'':'?p='+PLANT; // 給 <img>、連結用（沒辦法帶標頭）
 (()=>{const _f=window.fetch.bind(window);window.fetch=(u,o={})=>{const s=String(u&&u.url||u);
-  if(/^\/?api\//.test(s)||s.startsWith(location.origin+'/api/')){const h=new Headers(o.headers||{});h.set('x-plant',PLANT);o={...o,headers:h}}return _f(u,o)}})();
+  if(/^\/?api\//.test(s)||s.startsWith(location.origin+'/api/')){const h=new Headers(o.headers||{});if(!h.has('x-plant'))h.set('x-plant',PLANT);o={...o,headers:h}}return _f(u,o)}})();
 document.title=`毅東工程 Exhaust · ${PLANTS[PLANT]}`;
 document.querySelectorAll('[data-plant]').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.plant===PLANT));
   b.addEventListener('click',()=>{if(b.dataset.plant===PLANT)return;try{localStorage.setItem('exq-plant',b.dataset.plant)}catch(e){}const u=new URL(location.href);u.searchParams.delete('plant');history.replaceState(null,'',u.pathname+u.search+u.hash);location.reload()})});
@@ -528,8 +530,8 @@ let tmr;$('q').addEventListener('input',()=>{clearTimeout(tmr);tmr=setTimeout(()
 document.querySelector('.filters').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.area)state.area=b.dataset.area;else{const f=b.dataset.f;if(f==='old')state.old=!state.old;else state.f=f}syncBtns();save();render()});
 
 /* ---------- API ---------- */
-async function call(path,method,body){
-  const r=await fetch(path,{method,headers:{'content-type':'application/json','x-edit-key':EDIT||''},body:body?JSON.stringify(body):undefined});
+async function call(path,method,body,plant){
+  const r=await fetch(path,{method,headers:{'content-type':'application/json','x-edit-key':EDIT||'',...(plant?{'x-plant':plant}:{})},body:body?JSON.stringify(body):undefined});
   let j={};try{j=await r.json()}catch(e){}
   if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
   return j;
@@ -708,9 +710,10 @@ const viewOfHash=()=>({'#jobs':'jobs','#iso':'iso','#survey':'survey','#cal':'ca
 state.view=viewOfHash();state.isoF='all';
 state.day=todayStr();
 let WHO='';try{WHO=localStorage.getItem('exq-who')||''}catch(e){}
-const KIND={hook:'裝機',dehook:'拆機',gas:'送氣'};const KDONE={hook:'已裝機',dehook:'已拆機',gas:'已送氣'};
+const KIND={hook:'裝機',dehook:'拆機',gas:'送氣',labor:'點工'};const KDONE={hook:'已裝機',dehook:'已拆機',gas:'已送氣',labor:'已完成'};
+const crewOf=v=>String(v||'').split(/[、,，\s]+/).map(x=>x.trim()).filter(Boolean);
 const ITEMS=['高架作業','動火作業','高架地板','天花板作業','有機溶劑作業'];
-const blankForm=(o={})=>({kind:'gas',tool:'',apprId:'',date:'',time:'',note:'',pts:null,area:'',floor:'',col:'',vendor:'',items:new Set(),...o});
+const blankForm=(o={})=>({plant:PLANT,crew:'',work:'',labor:'',kind:'gas',tool:'',apprId:'',date:'',time:'',note:'',pts:null,area:'',floor:'',col:'',vendor:'',items:new Set(),...o});
 let FORM=blankForm();
 function findAppr(tool){const k=norm(tool);const c=D.appr.filter(a=>a.T===k);return c.find(a=>!a.old)||c[0]||null}
 function applyJobPending(list){const now=Date.now();const m=new Map(list.map(j=>[j.id,j]));
@@ -723,13 +726,14 @@ const _prep=prepare;prepare=function(){const now=Date.now();D.gasp=D.gasp||{};fo
 function jobsFor(a,code){return JOBS.filter(j=>(j.kind||'gas')==='gas'&&String(j.apprId)===String(a.id)&&!j.done&&j.points.includes(code)).sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time))}
 function ptGas(a,i){const g=a.pg&&a.pg[i];if(g)return `<span class="chip gas-yes">已送氣</span><div class="where">${esc(String(g.at||'').slice(5,10).replace('-','/'))}</div>`;
   const js=jobsFor(a,EXQ.codeKey(a.p[i][0]));if(js.length)return `<span class="chip gas-part">排定 ${esc(js[0].date.slice(5).replace('-','/'))} ${esc(js[0].time||'')}</span>`;return '<span class="src">—</span>'}
-function jobAppr(j){return (j.apprId&&D.appr.find(x=>String(x.id)===String(j.apprId)))||findAppr(j.tool)}
+function jobAppr(j){if(!j.tool)return null;return (j.apprId&&D.appr.find(x=>String(x.id)===String(j.apprId)))||findAppr(j.tool)}
 function jobCard(j,d){const a=jobAppr(j),kd=j.kind||'gas',ds=DAYS(j),di=d?ds.indexOf(d):-1;const loc=[j.area||(a&&a.a)||'',j.floor,j.col,j.vendor].filter(Boolean);
   return `<div class="job${j.done?' done':''}"><div class="tm">${esc(j.time||'—')}${ds.length>1&&di>=0?`<small style="color:var(--accent);font-weight:600">第 ${di+1}/${ds.length} 天</small>`:''}<small>${esc(j.area||(a&&a.a)||'')}</small></div>
-  <div style="min-width:0"><span class="kind ${kd}">${KIND[kd]}</span><button class="pt who" data-goq="${esc(j.tool)}">${esc(j.tool)}</button>${a?` <span class="src">${esc(a.mod)} · MICAP ${esc(a.m)}</span>`:' <span class="chip unappr">點位未核准</span>'}
+  <div style="min-width:0"><span class="kind ${kd}">${KIND[kd]}</span>${kd==='labor'?`<b class="who">${esc(j.work||'點工')}</b>${j.labor!=null?` <span class="chip isoc">${j.labor} 工</span>`:''}${j.tool?` <button class="pt" data-goq="${esc(j.tool)}">${esc(j.tool)}</button>`:''}`:`<button class="pt who" data-goq="${esc(j.tool)}">${esc(j.tool)}</button>${a?` <span class="src">${esc(a.mod)} · MICAP ${esc(a.m)}</span>`:' <span class="chip unappr">點位未核准</span>'}`}
+   ${j.crew&&j.crew.length?`<div class="crew">人員 ${j.crew.length} 人：<b>${j.crew.map(esc).join('、')}</b></div>`:''}
    ${loc.length?`<div class="where" style="font-family:var(--sans)">${loc.map(esc).join(' · ')}${j.items&&j.items.length?'　'+j.items.map(esc).join('、'):''}</div>`:(j.items&&j.items.length?`<div class="where" style="font-family:var(--sans)">${j.items.map(esc).join('、')}</div>`:'')}
-   ${j.points&&j.points.length?`<div class="pts">${j.points.map(p=>`<span>${esc(p)}</span>`).join('')}</div>`:(a?'':`<div class="where" style="font-family:var(--sans);color:var(--bad)">查無核准截圖，請確認核准後再施工</div>`)}${j.note?`<div class="where" style="font-family:var(--sans)">${esc(j.note)}</div>`:''}
-   ${(()=>{const pd=d&&ds.includes(d)?d:ds[ds.length-1];const v=j.done?100:(j.prog||{})[pd];const cur=pctAt(j,pd);
+   ${j.points&&j.points.length?`<div class="pts">${j.points.map(p=>`<span>${esc(p)}</span>`).join('')}</div>`:(a||kd==='labor'?'':`<div class="where" style="font-family:var(--sans);color:var(--bad)">查無核准截圖，請確認核准後再施工</div>`)}${j.note?`<div class="where" style="font-family:var(--sans)">${esc(j.note)}</div>`:''}
+   ${kd==='labor'?'':(()=>{const pd=d&&ds.includes(d)?d:ds[ds.length-1];const v=j.done?100:(j.prog||{})[pd];const cur=pctAt(j,pd);
      return `<div class="prog"><span class="src">完成程度${ds.length>1?`（${md(pd)} 累計）`:''}</span><span class="pbar"><i class="${kd}" style="width:${cur||0}%"></i></span><b class="pv">${cur==null?'未填':cur+'%'}</b>
      ${j.done?'':PSTEPS.map(p=>`<button type="button" class="btn small${v===p?' on':''}" data-jprog="${esc(j.id)}" data-d="${pd}" data-p="${p}">${p}%</button>`).join('')}</div>
      <div class="pnote"><input data-jpn="${esc(j.id)}" data-d="${pd}" value="${esc((j.pnote||{})[pd]||'')}" placeholder="${md(pd)} 進度備註，例：主管完成、等支管材料" aria-label="${md(pd)} 進度備註"><button type="button" class="btn small" data-jpnsave="${esc(j.id)}" data-d="${pd}">儲存備註</button></div>
@@ -953,16 +957,16 @@ $('svyView').addEventListener('submit',async e=>{e.preventDefault();const msg=$(
     const wasEdit=!!b.id;SVF=blankSvy({grp:b.grp});render();const m=$('svMsg');if(m)m.textContent=(wasEdit?'已修改：':'已新增：')+r.item.tool}
   catch(err){msg.textContent=err.message;btn.disabled=false}});
 // 總覽：月曆顯示裝機、拆機、送氣排程
-state.calM=todayStr().slice(0,7);state.calK={hook:true,dehook:true,gas:true};
+state.calM=todayStr().slice(0,7);state.calK={hook:true,dehook:true,gas:true,labor:true};
 function renderCal(){const [Y,M]=state.calM.split('-').map(Number);const first=new Date(Y,M-1,1),start=new Date(first);start.setDate(1-first.getDay());
   const days=[];for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);days.push(d.toLocaleDateString('sv-SE'))}
   while(days.length>35&&days.slice(-7).every(d=>d.slice(0,7)!==state.calM))days.splice(-7);
-  const by={};const inMonth={hook:new Set(),dehook:new Set(),gas:new Set()};
+  const by={};const inMonth={hook:new Set(),dehook:new Set(),gas:new Set(),labor:new Set()};
   for(const j of JOBS){const k=j.kind||'gas';const ds=DAYS(j);ds.forEach((d,i)=>{(by[d]=by[d]||[]).push({j,k,i,n:ds.length});if(d.slice(0,7)===state.calM)inMonth[k].add(j.id)})}
   const t=todayStr(),MAX=4;
-  const KC={hook:'37,99,235',dehook:'180,83,9',gas:'21,128,61'};
+  const KC={hook:'37,99,235',dehook:'180,83,9',gas:'21,128,61',labor:'124,58,237'};
   const ev=x=>{const dd=DAYS(x.j)[x.i],p=pctAt(x.j,dd),c=KC[x.k];const st=p==null?'':`background:linear-gradient(90deg,rgba(${c},${p>=100?.55:.38}) ${p}%,rgba(${c},.08) ${p}%)`;
-    return `<button class="ev ${x.k}${x.j.done?' done':''}${p==null?' np':''}" style="${st}" data-calday="${esc(dd)}" title="${esc(KIND[x.k]+' '+x.j.tool+(x.n>1?`（第 ${x.i+1}/${x.n} 天）`:'')+' · 完成程度 '+(p==null?'未填':p+'%')+((x.j.pnote||{})[dd]?' · 備註：'+x.j.pnote[dd]:'')+(x.j.done?' · 已完成':'')+(x.j.area?' · '+x.j.area:''))}">${x.j.done?'✓ ':''}${p!=null&&!x.j.done?`<b>${p}%</b> `:''}${esc(KIND[x.k])} ${esc(x.j.tool)}${x.n>1?` ${x.i+1}/${x.n}`:''}${(x.j.pnote||{})[dd]?` ✎<span class="evn">${esc(x.j.pnote[dd])}</span>`:''}</button>`};
+    return `<button class="ev ${x.k}${x.j.done?' done':''}${p==null?' np':''}" style="${st}" data-calday="${esc(dd)}" title="${esc(KIND[x.k]+' '+(x.j.tool||x.j.work||'')+(x.j.labor!=null?' '+x.j.labor+'工':'')+(x.j.crew&&x.j.crew.length?' · '+x.j.crew.join('、'):'')+(x.n>1?`（第 ${x.i+1}/${x.n} 天）`:'')+' · 完成程度 '+(p==null?'未填':p+'%')+((x.j.pnote||{})[dd]?' · 備註：'+x.j.pnote[dd]:'')+(x.j.done?' · 已完成':'')+(x.j.area?' · '+x.j.area:''))}">${x.j.done?'✓ ':''}${p!=null&&!x.j.done?`<b>${p}%</b> `:''}${esc(KIND[x.k])} ${esc(x.j.tool||x.j.work||'')}${x.k==='labor'&&x.j.labor!=null?` ${x.j.labor}工`:''}${x.n>1?` ${x.i+1}/${x.n}`:''}${(x.j.pnote||{})[dd]?` ✎<span class="evn">${esc(x.j.pnote[dd])}</span>`:''}</button>`};
   const cell=d=>{const L=(by[d]||[]).filter(x=>state.calK[x.k]).sort((a,b)=>(a.j.done-b.j.done)||(a.j.time||'99').localeCompare(b.j.time||'99'));const out=d.slice(0,7)!==state.calM;const dt=new Date(d+'T00:00:00');
     return `<div class="cell${out?' out':''}${d===t?' today':''}${L.length?'':' noev'}"><button class="dn" data-calday="${d}">${dt.getDate()}<small>${dt.getMonth()+1}/${dt.getDate()}（${WD[dt.getDay()]}）${d===t?' 今天':''}</small></button>
      ${L.slice(0,MAX).map(ev).join('')}${L.length>MAX?`<button class="more" data-calday="${d}">還有 ${L.length-MAX} 筆…</button>`:''}</div>`};
@@ -982,33 +986,37 @@ function renderJobs(){
   const opts=D.appr.filter(a=>!a.old).sort((x,y)=>(GORD[x.gasSt]-GORD[y.gasSt])||x.t.localeCompare(y.t)).map(a=>`<option value="${esc(a.t)}">${esc(a.a)} · ${GASL[a.gasSt]||'未送氣'}</option>`).join('');
   if(!FORM.date)FORM.date=d;
   $('jobsView').innerHTML=`<div class="jobs">
-  <div class="dayrow"><h2>每日施工 <span class="count">${dayLabel(d)}${d===todayStr()?' 今天':''} · ${list.length} 筆 · 完成 ${done}${list.length?'（'+Object.keys(KIND).map(k=>[KIND[k],list.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、')+'）':''}</span></h2>
+  <div class="dayrow"><h2>每日施工 <span class="count">${dayLabel(d)}${d===todayStr()?' 今天':''} · ${list.length} 筆 · 完成 ${done}${list.length?'（'+Object.keys(KIND).map(k=>[KIND[k],list.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、')+'）':''}${(()=>{const ppl=new Set(list.flatMap(j=>j.crew||[]));const lb=list.filter(j=>j.kind==='labor').reduce((t,j)=>t+(+j.labor||0),0);return ppl.size||lb?` · 出工 ${ppl.size} 人${lb?`（點工 ${lb} 工）`:''}`:''})()}</span></h2>
    <button class="btn small" data-day="-1">前一天</button><input type="date" id="jobDay" value="${d}" aria-label="選擇日期"><button class="btn small" data-day="1">後一天</button><button class="btn small" data-day="0">今天</button></div>
   <div class="jlist">${list.length?list.map(j=>jobCard(j,d)).join(''):`<div class="empty">${dayLabel(d)} 沒有施工排程，可以在下方新增。</div>`}</div>
   ${overdue.length&&d===todayStr()?`<h2>之前未完成 <span class="count">${overdue.length} 筆</span></h2><div class="jlist">${overdue.map(j=>jobCard({...j,time:md(DAYS(j)[DAYS(j).length-1])+' '+(j.time||'')})).join('')}</div>`:''}
   <form class="jform" id="jobForm" autocomplete="off"><h3 style="margin:0">${FORM.editId?'修改排程：'+esc(FORM.editTool||FORM.tool):'新增施工排程'}</h3>
-   <div class="kseg" role="group" aria-label="施工類別">${Object.entries(KIND).map(([k,v])=>`<button type="button" data-kind="${k}" aria-pressed="${FORM.kind===k}">${v}</button>`).join('')}</div>
+   <div class="row" style="gap:10px;flex-wrap:wrap"><span class="src">廠區</span><div class="kseg" role="group" aria-label="記錄到哪個廠">${FORM.editId?`<button type="button" aria-pressed="true">${PLANTS[PLANT]}</button>`:Object.entries(PLANTS).map(([k,v])=>`<button type="button" data-fplant="${k}" aria-pressed="${FORM.plant===k}">${v}</button>`).join('')}</div>
+    <span class="src">類別</span><div class="kseg" role="group" aria-label="施工類別">${Object.entries(KIND).map(([k,v])=>`<button type="button" data-kind="${k}" aria-pressed="${FORM.kind===k}">${v}</button>`).join('')}</div></div>
+   ${FORM.plant!==PLANT?`<div class="warn">這筆會記錄到 <b>${PLANTS[FORM.plant]}</b>，切換到${PLANTS[FORM.plant]}才看得到</div>`:''}
    <div class="fields">
     <label class="f">日期<input type="date" id="jfDate" value="${esc(FORM.date)}" required></label>
     <label class="f">時間<input type="time" id="jfTime" value="${esc(FORM.time)}"></label>
-    <label class="f" style="grid-column:span 2">機台（可搜尋，清單沒有可直接輸入）<input id="jfTool" list="jfTools" value="${esc(FORM.tool)}" placeholder="例：KTINL16700" style="font-family:var(--mono);text-transform:uppercase"></label>
+    ${FORM.kind==='labor'?`<label class="f">工作內容<input id="jfWork" value="${esc(FORM.work)}" placeholder="例：司機、送料、推料"></label><label class="f">工數<input id="jfLabor" type="number" min="0" step="0.5" value="${esc(FORM.labor)}" placeholder="預設＝人數"></label>`
+      :`<label class="f" style="grid-column:span 2">機台（可搜尋，清單沒有可直接輸入）<input id="jfTool" list="jfTools" value="${esc(FORM.tool)}" placeholder="例：KTINL16700" style="font-family:var(--mono);text-transform:uppercase"></label>`}
    </div>
+   <label class="f">人員（用頓號或空白分開）<input id="jfCrew" value="${esc(FORM.crew)}" placeholder="例：陳建文、王承凱、鄭明峻"></label>
    <datalist id="jfTools">${opts}</datalist>
-   <div class="fields">
+   ${FORM.kind==='labor'?'':`<div class="fields">
     <label class="f">棟別<input id="jfArea" value="${esc(FORM.area)}" placeholder="A1 / A3-2"></label>
     <label class="f">樓層<input id="jfFloor" value="${esc(FORM.floor)}" placeholder="L10-L30"></label>
     <label class="f">柱位<input id="jfCol" value="${esc(FORM.col)}" placeholder="F21"></label>
     <label class="f">廠商<input id="jfVendor" value="${esc(FORM.vendor)}" placeholder="毅東"></label>
    </div>
    <div class="f" style="display:grid;gap:6px"><span class="src">作業項目</span><div class="items">${ITEMS.map(t=>`<label><input type="checkbox" data-item="${esc(t)}"${FORM.items.has(t)?' checked':''}> ${esc(t)}</label>`).join('')}</div></div>
-   <div class="f" style="display:grid;gap:6px"><span class="src">${FORM.kind==='gas'?'送氣點位':'施工點位'}</span><div id="jfPts">${ptPicker()}</div></div>
+   <div class="f" style="display:grid;gap:6px"><span class="src">${FORM.kind==='gas'?'送氣點位':'施工點位'}</span><div id="jfPts">${ptPicker()}</div></div>`}
    <label class="f">備註（選填）<input id="jfNote" value="${esc(FORM.note)}" placeholder="例：切管、配合廠商、需停機"></label>
    <div class="row"><button type="submit" class="btn primary">${FORM.editId?'儲存修改':'新增排程'}</button>${FORM.editId?'<button type="button" class="btn" data-jcancel>取消修改</button>':''}<span class="src" id="jfMsg"></span><span style="flex:1"></span><label class="src">完成人（選填）<input id="whoAmI" value="${esc(WHO)}" style="width:120px;padding:4px 8px;margin-left:6px"></label></div>
   </form></div>`;
 }
 $('jobsView').addEventListener('input',e=>{
   if(e.target.id==='jfTool'){FORM.tool=e.target.value.trim().toUpperCase();const a=findAppr(FORM.tool);const nid=a?String(a.id):'';if(nid!==FORM.apprId){FORM.apprId=nid;FORM.pts=null;if(a&&!FORM.area){FORM.area=a.a;$('jfArea').value=a.a}$('jfPts').innerHTML=ptPicker()}else if(!a)$('jfPts').innerHTML=ptPicker()}
-  for(const[id,k]of[['jfArea','area'],['jfFloor','floor'],['jfCol','col'],['jfVendor','vendor']])if(e.target.id===id)FORM[k]=e.target.value.trim();
+  for(const[id,k]of[['jfArea','area'],['jfFloor','floor'],['jfCol','col'],['jfVendor','vendor'],['jfWork','work'],['jfLabor','labor'],['jfCrew','crew']])if(e.target.id===id)FORM[k]=e.target.value.trim();
   if(e.target.dataset.item){if(e.target.checked)FORM.items.add(e.target.dataset.item);else FORM.items.delete(e.target.dataset.item)}
   if(e.target.id==='jfTime')FORM.time=e.target.value;if(e.target.id==='jfNote')FORM.note=e.target.value;if(e.target.id==='jfDate')FORM.date=e.target.value;
   if(e.target.id==='whoAmI'){WHO=e.target.value.trim();try{localStorage.setItem('exq-who',WHO)}catch(err){}}
@@ -1037,9 +1045,10 @@ $('jobsView').addEventListener('click',async e=>{
     (ad||rm).disabled=true;try{const r=await call('api/jobs/'+id,'PATCH',{days:ds});PEND.jobs[id]={job:r.job,t:Date.now()};JOBS=applyJobPending(JOBS);updBadge();renderJobs()}
     catch(err){(ad||rm).disabled=false;const m=document.querySelector(`[data-jmsg="${CSS.escape(id)}"]`);if(m)m.textContent=err.message}return}
   const je=e.target.closest('[data-jedit]');if(je){const j=JOBS.find(x=>x.id===je.dataset.jedit);if(!j)return;const a=jobAppr(j);
-    FORM=blankForm({editId:j.id,editTool:j.tool,kind:j.kind||'gas',tool:j.tool,apprId:a?String(a.id):'',date:j.date,time:j.time||'',note:j.note||'',area:j.area||'',floor:j.floor||'',col:j.col||'',vendor:j.vendor||'',items:new Set(j.items||[]),pts:a?new Set(j.points||[]):null});
+    FORM=blankForm({editId:j.id,editTool:j.tool||j.work||'點工',crew:(j.crew||[]).join('、'),work:j.work||'',labor:j.labor==null?'':String(j.labor),kind:j.kind||'gas',tool:j.tool,apprId:a?String(a.id):'',date:j.date,time:j.time||'',note:j.note||'',area:j.area||'',floor:j.floor||'',col:j.col||'',vendor:j.vendor||'',items:new Set(j.items||[]),pts:a?new Set(j.points||[]):null});
     renderJobs();const f=$('jobForm');if(f){f.scrollIntoView({behavior:'smooth',block:'start'});f.style.borderColor='var(--warn, #b45309)'}return}
   if(e.target.closest('[data-jcancel]')){FORM=blankForm({date:state.day});renderJobs();return}
+  const fp=e.target.closest('[data-fplant]');if(fp){FORM.plant=fp.dataset.fplant;FORM.tool='';FORM.apprId='';FORM.pts=null;renderJobs();return}
   const kb=e.target.closest('[data-kind]');if(kb){FORM.kind=kb.dataset.kind;FORM.pts=null;renderJobs();return}
   const pa=e.target.closest('[data-pkall]');if(pa){const a=D.appr.find(x=>String(x.id)===String(FORM.apprId));if(a){FORM.pts=new Set(pa.dataset.pkall==='1'?a.p.map(p=>EXQ.codeKey(p[0])):[]);$('jfPts').innerHTML=ptPicker()}return}
   const gq=e.target.closest('[data-goq]');if(gq){state.view='query';state.q=gq.dataset.goq;$('q').value=state.q;history.replaceState(null,'','#query');save();render();window.scrollTo({top:0});return}
@@ -1053,17 +1062,20 @@ async function savePnote(id,d){const inp=document.querySelector(`[data-jpn="${CS
   catch(err){inp.disabled=false;if(m)m.textContent=err.message}}
 $('jobsView').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.jpn){e.preventDefault();savePnote(e.target.dataset.jpn,e.target.dataset.d)}});
 $('jobsView').addEventListener('submit',async e=>{e.preventDefault();const msg=$('jfMsg');
-  const a=FORM.apprId&&D.appr.find(x=>String(x.id)===String(FORM.apprId));
-  if(!FORM.tool){msg.textContent='請輸入機台。';return}if(!FORM.date){msg.textContent='請選擇日期。';return}
+  const other=!FORM.editId&&FORM.plant!==PLANT;const a=!other&&FORM.kind!=='labor'&&FORM.apprId&&D.appr.find(x=>String(x.id)===String(FORM.apprId));
+  const crew=crewOf(FORM.crew);
+  if(FORM.kind==='labor'){if(!FORM.work&&!crew.length){msg.textContent='請填工作內容或人員。';return}}else if(!FORM.tool){msg.textContent='請輸入機台。';return}if(!FORM.date){msg.textContent='請選擇日期。';return}
   if(a&&FORM.kind==='gas'&&(!FORM.pts||!FORM.pts.size)){msg.textContent='請至少勾選一個送氣點位。';return}
   const btn=e.target.querySelector('[type=submit]');btn.disabled=true;msg.textContent='新增中…';
-  const body={kind:FORM.kind,date:FORM.date,time:FORM.time,apprId:a?a.id:'',tool:a?a.t:FORM.tool,area:FORM.area||(a?a.a:''),floor:FORM.floor,col:FORM.col,vendor:FORM.vendor,items:[...FORM.items],points:a&&FORM.pts?[...FORM.pts]:[],note:FORM.note};
-  try{const old=FORM.editId&&JOBS.find(x=>x.id===FORM.editId);const r=FORM.editId?await call('api/jobs/'+FORM.editId,'PATCH',body):await call('api/jobs','POST',body);
+  const body={kind:FORM.kind,date:FORM.date,time:FORM.time,apprId:a?a.id:'',tool:a?a.t:FORM.tool,area:FORM.area||(a?a.a:''),floor:FORM.floor,col:FORM.col,vendor:FORM.vendor,items:[...FORM.items],points:a&&FORM.pts?[...FORM.pts]:[],note:FORM.note,crew,work:FORM.kind==='labor'?FORM.work:'',labor:FORM.kind==='labor'?(FORM.labor===''?crew.length:+FORM.labor):null};
+  if(FORM.kind==='labor')body.tool='';
+  try{const old=FORM.editId&&JOBS.find(x=>x.id===FORM.editId);const r=FORM.editId?await call('api/jobs/'+FORM.editId,'PATCH',body):await call('api/jobs','POST',body,other?FORM.plant:'');
+    if(other){const pl=FORM.plant;FORM=blankForm({kind:FORM.kind,date:FORM.date,vendor:FORM.vendor,plant:pl});renderJobs();const m=$('jfMsg');if(m)m.textContent=`已記錄到${PLANTS[pl]}：${KIND[r.job.kind]} ${r.job.tool||r.job.work||''}`;return}
     if(old&&old.done&&(old.kind||'gas')==='gas'&&old.apprId){const at=new Date().toISOString();for(const c of old.points)PEND.gasp[old.apprId+'|'+c]={v:'no',at,t:Date.now()};
       const nj=r.job;if((nj.kind||'gas')==='gas'&&nj.apprId)for(const c of nj.points)PEND.gasp[nj.apprId+'|'+c]={v:'yes',at,job:nj.id,t:Date.now()};prepare()}
     const wasEdit=!!FORM.editId;
     PEND.jobs[r.job.id]={job:r.job,t:Date.now()};JOBS=applyJobPending(JOBS);state.day=FORM.date;FORM=blankForm({kind:FORM.kind,date:FORM.date,vendor:FORM.vendor});updBadge();renderJobs();
-    const m=$('jfMsg');if(m)m.textContent=`${wasEdit?'已修改':'已新增'}：${KIND[r.job.kind]} ${r.job.tool}${r.job.apprId?'':'（點位未核准）'}`}
+    const m=$('jfMsg');if(m)m.textContent=`${wasEdit?'已修改':'已新增'}：${KIND[r.job.kind]} ${r.job.tool||r.job.work||''}${r.job.kind==='labor'||r.job.apprId?'':'（點位未核准）'}`}
   catch(err){msg.textContent=err.message;btn.disabled=false}
 });
 function clearQ(){state.q='';$('q').value='';save();render();window.scrollTo({top:0})}

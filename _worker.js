@@ -54,6 +54,8 @@ async function dropOtherIso(env, keepId, t, c, known = []) {
   await Promise.all(gone.map(id => env.DB.delete('iso:' + id)));
   return gone;
 }
+const cleanCrew = v => (Array.isArray(v) ? v : String(v || '').split(/[、,，\s]+/)).map(x => String(x || '').trim().slice(0, 20)).filter(Boolean).slice(0, 40);
+const cleanLabor = v => { const n = +v; return v === '' || v == null || isNaN(n) ? null : Math.max(0, Math.min(999, Math.round(n * 2) / 2)); };
 async function putJob(env, job) {
   await env.DB.put('job:' + job.id, JSON.stringify(job), { metadata: { d: job.date, done: job.done } });
 }
@@ -139,9 +141,9 @@ async function api(req, env, url) {
     if (!env.DB) return J({ error: '尚未綁定 KV 儲存空間 DB。' }, 503);
     const b = await req.json();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) return J({ error: '請選擇日期。' }, 400);
-    const kind = ['hook', 'dehook', 'gas'].includes(b.kind) ? b.kind : 'gas';
+    const kind = ['hook', 'dehook', 'gas', 'labor'].includes(b.kind) ? b.kind : 'gas';
     const tool = String(b.tool || '').toUpperCase().replace(/\s+/g, '').slice(0, 60);
-    if (!tool) return J({ error: '請輸入機台。' }, 400);
+    if (!tool && kind !== 'labor') return J({ error: '請輸入機台。' }, 400);
     const points = Array.isArray(b.points) ? b.points.map(p => String(p).slice(0, 80)).slice(0, 30) : [];
     const s = (v, n) => String(v || '').slice(0, n);
     const job = {
@@ -149,8 +151,11 @@ async function api(req, env, url) {
       kind, date: b.date, days: cleanDays(b.days, b.date), time: s(b.time, 5), apprId: b.apprId ? String(b.apprId) : '', tool,
       area: s(b.area, 10), floor: s(b.floor, 20), col: s(b.col, 20), vendor: s(b.vendor, 30),
       items: Array.isArray(b.items) ? b.items.map(x => s(x, 20)).filter(Boolean).slice(0, 8) : [],
-      points, note: s(b.note, 300), done: false, created: new Date().toISOString(),
+      points, note: s(b.note, 300), done: !!b.done, created: new Date().toISOString(),
+      // 人員、點工內容與工數
+      crew: cleanCrew(b.crew), work: s(b.work, 60), labor: cleanLabor(b.labor),
     };
+    if (job.done) { job.doneAt = new Date().toISOString(); job.doneBy = s(b.by, 30); }
     await putJob(env, job);
     return J({ ok: true, job });
   }
@@ -169,13 +174,13 @@ async function api(req, env, url) {
     const edit = ['kind', 'date', 'days', 'tool', 'apprId', 'points', 'items'].some(k => k in b);
     if (edit) {
       if (job.done) await setPointGas(env, job, false);
-      if ('kind' in b && ['hook', 'dehook', 'gas'].includes(b.kind)) job.kind = b.kind;
+      if ('kind' in b && ['hook', 'dehook', 'gas', 'labor'].includes(b.kind)) job.kind = b.kind;
       const oldDays = job.days && job.days.length ? job.days : [job.date];
       let nd = null;
       if (Array.isArray(b.days)) nd = cleanDays(b.days, b.days[0]);
       else if (/^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) nd = cleanDays(oldDays.filter(x => x !== job.date), b.date);
       if (nd && nd.length) { job.days = nd; job.date = nd[0]; }
-      if ('tool' in b && String(b.tool || '').trim()) job.tool = String(b.tool).toUpperCase().replace(/\s+/g, '').slice(0, 60);
+      if ('tool' in b && (String(b.tool || '').trim() || job.kind === 'labor')) job.tool = String(b.tool || '').toUpperCase().replace(/\s+/g, '').slice(0, 60);
       if ('apprId' in b) job.apprId = b.apprId ? String(b.apprId) : '';
       if (Array.isArray(b.points)) job.points = b.points.map(p => String(p).slice(0, 80)).slice(0, 30);
       if (Array.isArray(b.items)) job.items = b.items.map(x => String(x || '').slice(0, 20)).filter(Boolean).slice(0, 8);
@@ -198,6 +203,9 @@ async function api(req, env, url) {
       await setPointGas(env, job, job.done);
     }
     if (edit && !('done' in b) && job.done) await setPointGas(env, job, true);
+    if ('crew' in b) job.crew = cleanCrew(b.crew);
+    if ('labor' in b) job.labor = cleanLabor(b.labor);
+    if ('work' in b) job.work = String(b.work || '').slice(0, 60);
     for (const [k, n] of [['time', 5], ['note', 300], ['area', 10], ['floor', 20], ['col', 20], ['vendor', 30]]) if (k in b) job[k] = String(b[k] || '').slice(0, n);
     await putJob(env, job);
     return J({ ok: true, job });
