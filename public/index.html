@@ -91,6 +91,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .cent .ppl{font-size:.85rem;color:var(--muted)}.cent .ppl b{color:var(--fg);font-weight:500}
 .cent .acts{display:flex;gap:4px;align-items:start}
 .offr{}
+.wglist{padding:0 12px 10px;display:grid;gap:4px}.wgi{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:6px 8px;border-radius:8px}.wgi:hover,.wgi.on{background:var(--accent-soft)}
+.wgi .pt{font:600 .92rem var(--mono)}.wgs{font-size:.8rem;padding:1px 8px;border-radius:999px;border:1px dashed var(--warn,#b7791f);color:var(--warn,#b7791f)}.wgs.ok{border-style:solid;border-color:var(--ok);color:var(--ok)}
 .plt{display:inline-block;font:600 .72rem var(--sans);padding:1px 7px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);margin-left:8px;vertical-align:2px;white-space:nowrap}.plt.tl{border-color:var(--info);color:var(--info)}.cent .acts .plt{margin:0 4px 0 0;align-self:center}
 .odday{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin:0 0 8px}.odday>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:10px 12px;cursor:pointer;list-style:none}
 .odday>summary::-webkit-details-marker{display:none}.odday>summary::before{content:'▸';color:var(--muted)}.odday[open]>summary::before{content:'▾'}
@@ -1136,6 +1138,24 @@ $('crewView').addEventListener('submit',async e=>{e.preventDefault();const F=CLF
     r.item={...r.item,pl:F.plant};CLPEND[r.item.id]={v:r.item,t:Date.now()};CLOG=clApply(CLOG);const wasEdit=!!F.id;state.clogM=r.item.date.slice(0,7);CLF=blankClog({date:F.date,kind:F.kind,plant:F.plant});renderCrew();$('clMsg').textContent=(wasEdit?'已修改':'已新增')+'（'+PLANTS[F.plant]+'）'}
   catch(err){msg.textContent=err.message;btn.disabled=false}});
 const JOB_OPEN=new Set();
+// 裝機 100%、還沒送氣完成的機台；點機台可排送氣日期
+let WG_OPEN=true,WG_EDIT=null;
+function waitGas(){const m=new Map();
+  for(const j of JOBS){if((j.kind||'gas')!=='hook'||pctNow(j)!==100||!j.tool)continue;const k=tkey(j.tool);const fin=String(j.doneAt||'').slice(0,10)||DAYS(j)[DAYS(j).length-1];const o=m.get(k);if(!o||fin>o.fin)m.set(k,{k,t:j.tool,fin,hook:j})}
+  const out=[];for(const o of m.values()){const G=JOBS.filter(j=>(j.kind||'gas')==='gas'&&tkey(j.tool)===o.k);if(G.some(j=>pctNow(j)===100))continue;
+    o.gas=G.sort((x,y)=>DAYS(x)[0].localeCompare(DAYS(y)[0]))[0]||null;out.push(o)}
+  return out.sort((x,y)=>(x.gas?1:0)-(y.gas?1:0)||x.fin.localeCompare(y.fin))}
+function waitGasHtml(){const L=waitGas();if(!L.length)return '';const ns=L.filter(o=>!o.gas).length;
+  return `<details class="odday wgas" ${WG_OPEN?'open':''}><summary><b>裝機完成・待送氣</b><span class="count">${L.length} 台${ns?` · 未排送氣 ${ns}`:''}（點機台排送氣日期）</span></summary><div class="wglist">${L.map(o=>{const a=findAppr(o.t);const loc=[o.hook.area||(a&&a.a)||'',o.hook.floor].filter(Boolean).join(' · ');
+    const ed=WG_EDIT===o.k;return `<div class="wgi${ed?' on':''}"><button type="button" class="pt" data-wg="${esc(o.k)}">${esc(o.t)}</button><span class="src">裝機完工 ${md(o.fin)}${loc?' · '+esc(loc):''}</span>
+      <span class="${o.gas?'wgs ok':'wgs'}">${o.gas?`送氣排定 ${md(DAYS(o.gas)[0])}${pctNow(o.gas)?` · ${pctNow(o.gas)}%`:''}`:'未排送氣'}</span>
+      ${ed?`<span class="row" style="gap:6px"><input type="date" id="wgDate" value="${o.gas?DAYS(o.gas)[0]:addDays(todayStr(),1)}"><button type="button" class="btn small primary" data-wgsave="${esc(o.k)}">${o.gas?'改送氣日期':'排送氣'}</button><button type="button" class="btn small" data-wgx>取消</button><span class="src" id="wgMsg"></span></span>`:''}</div>`}).join('')}</div></details>`}
+async function wgSave(k){const o=waitGas().find(x=>x.k===k);const d=$('wgDate').value;if(!o||!/^\d{4}-\d{2}-\d{2}$/.test(d)){$('wgMsg').textContent='請選日期';return}$('wgMsg').textContent='儲存中…';
+  try{let r;if(o.gas)r=await call('api/jobs/'+o.gas.id,'PATCH',{days:[d]});
+    else{const a=findAppr(o.t);const pts=a?a.p.map((p,i)=>a.pg&&a.pg[i]?null:EXQ.codeKey(p[0])).filter(Boolean):[];
+      r=await call('api/jobs','POST',{kind:'gas',date:d,tool:a?a.t:o.t,apprId:a?a.id:'',area:o.hook.area||(a?a.a:''),floor:o.hook.floor||'',col:o.hook.col||'',vendor:o.hook.vendor||'',points:pts,note:''})}
+    PEND.jobs[r.job.id]={job:r.job,t:Date.now()};JOBS=applyJobPending(JOBS);WG_EDIT=null;updBadge();renderJobs()}
+  catch(err){$('wgMsg').textContent=err.message}}
 $('jobsView').addEventListener('toggle',e=>{const dd=e.target;if(!dd.matches||!dd.matches('details.odday'))return;const od=dd.dataset.od;
   if(dd.open){JOB_OPEN.add(od);const jl=dd.querySelector(':scope>.jlist');if(jl&&!jl.children.length){const last=j=>DAYS(j)[DAYS(j).length-1];jl.innerHTML=JOBS.filter(j=>!j.done&&last(j)===od).sort((x,y)=>(x.time||'99').localeCompare(y.time||'99')).map(j=>jobCard({...j,time:md(od)+' '+(j.time||'')})).join('')}}else JOB_OPEN.delete(od)},true);
 function renderJobs(){
@@ -1147,6 +1167,7 @@ function renderJobs(){
   <div class="dayrow"><h2>每日施工 <span class="count">${dayLabel(d)}${d===todayStr()?' 今天':''} · ${list.length} 筆 · 完成 ${done}${list.length?'（'+Object.keys(KIND).map(k=>[KIND[k],list.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、')+'）':''}</span></h2>
    <button class="btn small" data-day="-1">前一天</button><input type="date" id="jobDay" value="${d}" aria-label="選擇日期"><button class="btn small" data-day="1">後一天</button><button class="btn small" data-day="0">今天</button></div>
   <div class="jlist">${list.length?list.map(j=>jobCard(j,d)).join(''):`<div class="empty">${dayLabel(d)} 沒有施工排程，可以在下方新增。</div>`}</div>
+  ${waitGasHtml()}
   ${overdue.length&&d===todayStr()?(()=>{const last=j=>DAYS(j)[DAYS(j).length-1];const ods=[...new Set(overdue.map(last))].sort().reverse();
     return `<h2>之前未完成 <span class="count">${overdue.length} 筆 · ${ods.length} 天（點日期展開）</span></h2>${ods.map(od=>{const L=overdue.filter(j=>last(j)===od);const op=JOB_OPEN.has(od);
       const kc=Object.keys(KIND).map(k=>[KIND[k],L.filter(j=>(j.kind||'gas')===k).length]).filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join('、');
@@ -1191,6 +1212,9 @@ $('jobsView').addEventListener('change',async e=>{
     prepare();updBadge()}
   catch(err){e.target.disabled=false;e.target.checked=!done;if(msg)msg.textContent=err.message}
 });
+$('jobsView').addEventListener('click',e=>{const w=e.target.closest('[data-wg]');if(w){WG_EDIT=WG_EDIT===w.dataset.wg?null:w.dataset.wg;renderJobs();return}
+  if(e.target.closest('[data-wgx]')){WG_EDIT=null;renderJobs();return}const sv=e.target.closest('[data-wgsave]');if(sv){sv.disabled=true;wgSave(sv.dataset.wgsave)}});
+$('jobsView').addEventListener('toggle',e=>{if(e.target.matches&&e.target.matches('details.wgas'))WG_OPEN=e.target.open},true);
 $('jobsView').addEventListener('click',async e=>{
   const dy=e.target.closest('[data-day]');if(dy){const n=+dy.dataset.day;state.day=n===0?todayStr():addDays(state.day,n);FORM.date=state.day;renderJobs();return}
   const ps=e.target.closest('[data-jpnsave]');if(ps){savePnote(ps.dataset.jpnsave,ps.dataset.d);return}
