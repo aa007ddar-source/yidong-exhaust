@@ -91,6 +91,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .cent .ppl{font-size:.85rem;color:var(--muted)}.cent .ppl b{color:var(--fg);font-weight:500}
 .cent .acts{display:flex;gap:4px;align-items:start}
 .offr{}
+.svsch{margin-top:4px;padding:2px 8px;font-size:.78rem}
 .wglist{padding:0 12px 10px;display:grid;gap:4px}.wgi{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:6px 8px;border-radius:8px}.wgi:hover,.wgi.on{background:var(--accent-soft)}
 .wgi .pt{font:600 .92rem var(--mono)}.wgs{font-size:.8rem;padding:1px 8px;border-radius:999px;border:1px dashed var(--warn,#b7791f);color:var(--warn,#b7791f)}.wgs.ok{border-style:solid;border-color:var(--ok);color:var(--ok)}
 .plt{display:inline-block;font:600 .72rem var(--sans);padding:1px 7px;border-radius:999px;border:1px solid var(--accent);color:var(--accent);margin-left:8px;vertical-align:2px;white-space:nowrap}.plt.tl{border-color:var(--info);color:var(--info)}.cent .acts .plt{margin:0 4px 0 0;align-self:center}
@@ -906,10 +907,20 @@ function svyAuto(x){if(x.done)return null;const ks=[x.tool,...String(x.link||'')
   const h=fin('hook');if(h==null)return null;const g=fin('gas');return {hook:h,gas:g==null?null:g}}
 // 會勘紀錄的「施工」欄：取每日施工的裝機排程（起始日～完工日／預計完工日）
 function svyWork(x){const ks=[x.tool,...String(x.link||'').split(/[、,，\s]+/)].filter(Boolean).map(tkey);
-  const J=JOBS.filter(j=>(j.kind||'gas')==='hook'&&ks.includes(tkey(j.tool)));if(!J.length)return '<span class="lk">未排程</span>';
+  const J=JOBS.filter(j=>(j.kind||'gas')==='hook'&&ks.includes(tkey(j.tool)));
+  const ed=SV_SCHED===x.id,btn=`<button type="button" class="btn small svsch" data-svsch="${esc(x.id)}">${J.length?'＋ 加施工日':'＋ 排入施工'}</button>`;
+  const box=ed?`<div class="row" style="gap:4px;margin-top:4px;flex-wrap:nowrap"><input type="date" id="svSchD" value="${todayStr()}" style="min-width:0;width:9.2em"><button type="button" class="btn small primary" data-svschok="${esc(x.id)}">確定</button><button type="button" class="btn small" data-svschx>✕</button></div><div class="src" id="svSchMsg"></div>`:'';
+  if(!J.length)return `<span class="lk">未排程</span><div>${ed?'':btn}</div>${box}`;
   const ds=J.flatMap(j=>DAYS(j)).sort(),st=ds[0],last=ds[ds.length-1];const fin=J.every(j=>pctNow(j)===100);
   const end=fin?J.map(j=>String(j.doneAt||'').slice(0,10)||DAYS(j)[DAYS(j).length-1]).sort().pop():last;const pc=Math.min(...J.map(j=>pctNow(j)??0));
-  return `${md(st)}～${md(end)}<div class="lk">${fin?'完工':'預計完工'}${!fin&&pc?` · 進度 ${pc}%`:''}</div>`}
+  return `${st===end?md(st):md(st)+'～'+md(end)}<div class="lk">${fin?'完工':'預計完工'}${!fin&&pc?` · 進度 ${pc}%`:''}</div>${fin||ed?'':`<div>${btn}</div>`}${box}`}
+let SV_SCHED=null;
+async function svSched(id){const x=SVY.find(y=>y.id===id);const d=$('svSchD').value;const m=$('svSchMsg');if(!x||!/^\d{4}-\d{2}-\d{2}$/.test(d)){m.textContent='請選日期';return}m.textContent='儲存中…';
+  const ks=[x.tool,...String(x.link||'').split(/[、,，\s]+/)].filter(Boolean).map(tkey);const j=JOBS.find(j=>(j.kind||'gas')==='hook'&&tkey(j.tool)===tkey(x.tool))||JOBS.find(j=>(j.kind||'gas')==='hook'&&ks.includes(tkey(j.tool)));
+  try{let r;if(j){if(DAYS(j).includes(d)){m.textContent='這天已經有排了';return}r=await call('api/jobs/'+j.id,'PATCH',{days:[...DAYS(j),d].sort()})}
+    else{const a=findAppr(x.tool);r=await call('api/jobs','POST',{kind:'hook',date:d,tool:a?a.t:x.tool,apprId:a?a.id:'',area:x.area||(a?a.a:'')||x.grp||'',floor:x.floor||'',vendor:x.vendor||'',note:x.link?'併案：'+x.link:''})}
+    PEND.jobs[r.job.id]={job:r.job,t:Date.now()};JOBS=applyJobPending(JOBS);SV_SCHED=null;updBadge();renderSvy();const mm=document.querySelector(`[data-svmsg="${CSS.escape(id)}"]`);if(mm)mm.textContent=`已排入 ${md(d)} 每日施工`}
+  catch(err){m.textContent=err.message}}
 function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
   const all=SVY.map(x=>{const a=svyAuto(x);return a==null?x:a.gas!=null?{...x,done:true,auto:a}:{...x,wgas:true,auto:a}}).sort((x,y)=>(x.on||x.odd||x.svy||'9999').localeCompare(y.on||y.odd||y.svy||'9999')||x.tool.localeCompare(y.tool));
   const list=f==='open'?all.filter(x=>!x.done&&!x.wgas):f==='gas'?all.filter(x=>x.wgas):f==='done'?all.filter(x=>x.done):all;
@@ -1001,6 +1012,8 @@ $('svyView').addEventListener('change',async e=>{if(e.target.id!=='tumsFile'||!e
       <div class="row"><button type="button" class="btn primary" data-tumsok>${ex?'更新會勘紀錄':'加入會勘紀錄'}</button><button type="button" class="btn" data-tumscancel>取消</button><span class="src" id="tumsMsg"></span></div></div>`}
   catch(err){pv.innerHTML=`<span class="src" style="color:var(--bad)">讀取失敗：${esc(err.message)}</span>`}e.target.value=''});
 $('svyView').addEventListener('click',async e=>{
+  const sc=e.target.closest('[data-svsch]');if(sc){SV_SCHED=sc.dataset.svsch;renderSvy();const i=$('svSchD');if(i)i.focus();return}
+  if(e.target.closest('[data-svschx]')){SV_SCHED=null;renderSvy();return}const so=e.target.closest('[data-svschok]');if(so){so.disabled=true;svSched(so.dataset.svschok);return}
   const se=e.target.closest('[data-spedit]');if(se){const x=SVY.find(y=>y.id===se.dataset.spedit);if(!x)return;SPECED={id:x.id,rows:(x.spec||[]).map(r=>({...r}))};renderSvy();return}
   const sa=e.target.closest('[data-spadd]');if(sa){const x=SVY.find(y=>y.id===sa.dataset.spadd);if(!x)return;SPECED={id:x.id,rows:[{unit:'CMM',pmax:'-400',pmin:'-350'}]};SVOPEN.add(x.id);renderSvy();return}
   if(SPECED){
