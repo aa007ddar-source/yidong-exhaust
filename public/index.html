@@ -92,6 +92,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .cent .acts{display:flex;gap:4px;align-items:start}
 .offr{}
 .svps{display:flex;flex-wrap:wrap;gap:4px 8px}.svp{font:600 .82rem var(--sans);white-space:nowrap}.svp.svna{color:var(--muted);font-weight:400}.svp.ok{color:var(--ok)}
+.svmc{display:block;border:0;background:none;padding:0;cursor:pointer;color:var(--muted);text-align:left}.svmc:hover{color:var(--accent);text-decoration:underline}
 .svsch{margin-top:4px;padding:2px 8px;font-size:.78rem}
 .wglist{padding:0 12px 10px;display:grid;gap:4px}.wgi{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:6px 8px;border-radius:8px}.wgi:hover,.wgi.on{background:var(--accent-soft)}
 .wgi .pt{font:600 .92rem var(--mono)}.wgs{font-size:.8rem;padding:1px 8px;border-radius:999px;border:1px dashed var(--warn,#b7791f);color:var(--warn,#b7791f)}.wgs.ok{border-style:solid;border-color:var(--ok);color:var(--ok)}
@@ -932,7 +933,7 @@ function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
   const list=f==='open'?all.filter(x=>!x.done&&!x.wgas):f==='gas'?all.filter(x=>x.wgas):f==='done'?all.filter(x=>x.done):all;
   const order=['A3','A1/A2'];const grps=[...new Set(list.map(x=>x.grp||'其他'))].sort((a,b)=>((order.indexOf(a)+1||99)-(order.indexOf(b)+1||99))||a.localeCompare(b));
   const row=x=>`<tr class="${x.done?'done':''}"><td><input type="checkbox" data-svdone="${esc(x.id)}"${x.done?' checked':''}${x.auto&&x.done?' disabled title="依每日施工進度自動判斷"':''} aria-label="完成" style="width:18px;height:18px;accent-color:var(--accent)"></td>
-    <td><button class="pt" data-svq="${esc(x.tool)}" style="font-weight:600">${esc(x.tool)}</button>${x.auto?`<div class="lk" style="color:${x.done?'var(--ok)':'var(--warn,#b7791f)'}">裝機 100%${x.auto.hook?' '+md(x.auto.hook):''}${x.done?` · 送氣完成${x.auto.gas?' '+md(x.auto.gas):''}`:' · 待送氣'}</div>`:''}${x.micap?`<div class="lk">MICAP ${esc(x.micap)}</div>`:''}${x.link?`<div class="lk">＋${esc(x.link)}</div>`:''}${x.spec&&x.spec.length?`<button type="button" class="btn small specbtn" data-svspec="${esc(x.id)}" aria-expanded="${SVOPEN.has(x.id)}">${SVOPEN.has(x.id)?'▾':'▸'} Exhaust 需求 ${x.spec.length}</button>`:`<button type="button" class="btn small specbtn" data-spadd="${esc(x.id)}">＋ Exhaust 需求</button>`}</td>
+    <td><button class="pt" data-svq="${esc(x.tool)}" style="font-weight:600">${esc(x.tool)}</button>${x.auto?`<div class="lk" style="color:${x.done?'var(--ok)':'var(--warn,#b7791f)'}">裝機 100%${x.auto.hook?' '+md(x.auto.hook):''}${x.done?` · 送氣完成${x.auto.gas?' '+md(x.auto.gas):''}`:' · 待送氣'}</div>`:''}<button type="button" class="lk svmc" data-svedit="${esc(x.id)}" title="點一下修改 MICAP">MICAP ${x.micap?esc(x.micap):'＋'}</button>${x.link?`<div class="lk">＋${esc(x.link)}</div>`:''}${x.spec&&x.spec.length?`<button type="button" class="btn small specbtn" data-svspec="${esc(x.id)}" aria-expanded="${SVOPEN.has(x.id)}">${SVOPEN.has(x.id)?'▾':'▸'} Exhaust 需求 ${x.spec.length}</button>`:`<button type="button" class="btn small specbtn" data-spadd="${esc(x.id)}">＋ Exhaust 需求</button>`}</td>
     <td class="d">${esc(x.floor||'—')}</td><td class="d">${x.svy?md(x.svy):'—'}</td><td class="d">${x.odd?md(x.odd):'—'}</td><td class="d">${x.on?md(x.on):esc(x.onText||'—')}${x.on&&x.onText?`<div class="lk">${esc(x.onText)}</div>`:''}${onFlag(x)}</td><td class="d">${svyWork(x)}</td>
     <td>${esc(x.gd||'')}</td><td>${esc(x.vendor||'')}</td><td>${svyProg(x)}</td>
     <td class="acts"><button class="btn small" data-svedit="${esc(x.id)}">修改</button> <button class="btn small danger" data-svdel="${esc(x.id)}">刪除</button><div class="src" data-svmsg="${esc(x.id)}"></div></td></tr>${SPECED&&SPECED.id===x.id?`<tr class="specrow"><td colspan="11">${specEditor()}</td></tr>`:x.spec&&x.spec.length&&SVOPEN.has(x.id)?`<tr class="specrow"><td colspan="11"><div class="row" style="gap:10px;margin-bottom:6px"><span class="src">${esc([x.area,x.loc,x.floor,x.src].filter(Boolean).join(' · '))}</span><button type="button" class="btn small" data-spedit="${esc(x.id)}">編輯 Exhaust 需求</button></div>${specTable(x.spec)}</td></tr>`:''}`;
@@ -947,6 +948,7 @@ function renderSvy(){if(!SVF)SVF=blankSvy();const f=state.svyF;
      <label class="f">分區<input id="sv_grp" list="svGrps" value="${esc(SVF.grp)}" placeholder="A3 / A1/A2"></label>
      <label class="f">樓層<input id="sv_floor" value="${esc(SVF.floor||'')}" placeholder="L40"></label>
      <label class="f" style="grid-column:span 2">機台<input id="sv_tool" list="jfTools2" value="${esc(SVF.tool)}" placeholder="例：KPINLM1100" style="font-family:var(--mono)"></label>
+     <label class="f">MICAP<input id="sv_micap" value="${esc(SVF.micap||'')}" placeholder="例：2514467" inputmode="numeric" style="font-family:var(--mono)"></label>
      <label class="f" style="grid-column:span 2">併案機台（選填）<input id="sv_link" value="${esc(SVF.link)}" placeholder="例：IMHCL36700、IMHCL36800" style="font-family:var(--mono)"></label>
     </div>
     <div class="fields">
@@ -1045,13 +1047,13 @@ $('svyView').addEventListener('click',async e=>{
     catch(err){tk.disabled=false;$('tumsMsg').textContent=err.message}return}
   const f=e.target.closest('[data-svf]');if(f){state.svyF=f.dataset.svf;renderSvy();return}
   const q=e.target.closest('[data-svq]');if(q){state.view='query';state.q=q.dataset.svq;$('q').value=state.q;history.replaceState(null,'','#query');save();render();window.scrollTo({top:0});return}
-  const ed=e.target.closest('[data-svedit]');if(ed){const x=SVY.find(y=>y.id===ed.dataset.svedit);if(!x)return;SVF=blankSvy(x);renderSvy();$('svForm').scrollIntoView({behavior:'smooth',block:'start'});return}
+  const ed=e.target.closest('[data-svedit]');if(ed){const x=SVY.find(y=>y.id===ed.dataset.svedit);if(!x)return;SVF=blankSvy(x);renderSvy();$('svForm').scrollIntoView({behavior:'smooth',block:'start'});if(ed.classList.contains('svmc'))setTimeout(()=>{const i=$('sv_micap');if(i){i.focus();i.select()}},300);return}
   if(e.target.closest('[data-svcancel]')){SVF=blankSvy();renderSvy();return}
   const del=e.target.closest('[data-svdel]');if(del){const id=del.dataset.svdel;if(del.dataset.confirm!=='1'){del.dataset.confirm='1';del.textContent='再按一次確定';return}
     del.disabled=true;try{await call('api/survey/'+id,'DELETE');SVPEND[id]={v:null,t:Date.now()};SVY=svApply(SVY);render()}catch(err){del.disabled=false;del.textContent='失敗：'+err.message}}});
 $('svyView').addEventListener('submit',async e=>{e.preventDefault();const msg=$('svMsg');const b={...SVF};b.tool=String(b.tool||'').trim().toUpperCase();
   if(!b.tool){msg.textContent='請輸入機台。';return}const btn=e.target.querySelector('[type=submit]');btn.disabled=true;msg.textContent='儲存中…';
-  try{const body={grp:b.grp,floor:b.floor||'',tool:b.tool,link:String(b.link||'').toUpperCase(),svy:b.svy,odd:b.odd,on:b.on,onText:b.onText,vendor:b.vendor,gd:b.gd,note:b.note};
+  try{const body={grp:b.grp,floor:b.floor||'',tool:b.tool,link:String(b.link||'').toUpperCase(),micap:String(b.micap||'').trim(),svy:b.svy,odd:b.odd,on:b.on,onText:b.onText,vendor:b.vendor,gd:b.gd,note:b.note};
     const r=b.id?await call('api/survey/'+b.id,'PATCH',body):await call('api/survey','POST',body);SVPEND[r.item.id]={v:r.item,t:Date.now()};SVY=svApply(SVY);
     const wasEdit=!!b.id;SVF=blankSvy({grp:b.grp});render();const m=$('svMsg');if(m)m.textContent=(wasEdit?'已修改：':'已新增：')+r.item.tool}
   catch(err){msg.textContent=err.message;btn.disabled=false}});
