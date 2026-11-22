@@ -908,7 +908,7 @@ function svyAuto(x){if(x.done)return null;const ks=[x.tool,...String(x.link||'')
 // 會勘紀錄的「施工」欄：取每日施工的裝機排程（起始日～完工日／預計完工日）
 function svyWork(x){const ks=[x.tool,...String(x.link||'').split(/[、,，\s]+/)].filter(Boolean).map(tkey);
   const J=JOBS.filter(j=>(j.kind||'gas')==='hook'&&ks.includes(tkey(j.tool)));
-  const ed=SV_SCHED===x.id,btn=`<button type="button" class="btn small svsch" data-svsch="${esc(x.id)}">${J.length?'＋ 加施工日':'＋ 排入施工'}</button>`;
+  const ed=SV_SCHED===x.id,btn=J.length?`<button type="button" class="btn small svsch" data-svsch="${esc(x.id)}">＋ 加施工日</button>`:`<button type="button" class="btn small svsch" data-svnew="${esc(x.id)}">＋ 排入施工</button>`;
   const box=ed?`<div class="row" style="gap:4px;margin-top:4px;flex-wrap:nowrap"><input type="date" id="svSchD" value="${todayStr()}" style="min-width:0;width:9.2em"><button type="button" class="btn small primary" data-svschok="${esc(x.id)}">確定</button><button type="button" class="btn small" data-svschx>✕</button></div><div class="src" id="svSchMsg"></div>`:'';
   if(!J.length)return `<span class="lk">未排程</span><div>${ed?'':btn}</div>${box}`;
   const ds=J.flatMap(j=>DAYS(j)).sort(),st=ds[0],last=ds[ds.length-1];const fin=J.every(j=>pctNow(j)===100);
@@ -1012,6 +1012,9 @@ $('svyView').addEventListener('change',async e=>{if(e.target.id!=='tumsFile'||!e
       <div class="row"><button type="button" class="btn primary" data-tumsok>${ex?'更新會勘紀錄':'加入會勘紀錄'}</button><button type="button" class="btn" data-tumscancel>取消</button><span class="src" id="tumsMsg"></span></div></div>`}
   catch(err){pv.innerHTML=`<span class="src" style="color:var(--bad)">讀取失敗：${esc(err.message)}</span>`}e.target.value=''});
 $('svyView').addEventListener('click',async e=>{
+  const sn=e.target.closest('[data-svnew]');if(sn){const x=SVY.find(y=>y.id===sn.dataset.svnew);if(!x)return;const a=findAppr(x.tool);
+    FORM=blankForm({kind:'hook',tool:a?a.t:x.tool,apprId:a?String(a.id):'',date:todayStr(),area:x.area||(a?a.a:'')||x.grp||'',floor:x.floor||'',vendor:x.vendor||'',note:x.link?'併案：'+x.link:'',pts:a?new Set(a.p.map(p=>EXQ.codeKey(p[0]))):null});
+    document.querySelector('.tabs [data-view="jobs"]').click();setTimeout(()=>{const f=$('jobForm');if(f){f.scrollIntoView({behavior:'smooth',block:'start'});f.style.borderColor='var(--accent)';const d=$('jf_date')||f.querySelector('input[type=date]');if(d)d.focus()}},60);return}
   const sc=e.target.closest('[data-svsch]');if(sc){SV_SCHED=sc.dataset.svsch;renderSvy();const i=$('svSchD');if(i)i.focus();return}
   if(e.target.closest('[data-svschx]')){SV_SCHED=null;renderSvy();return}const so=e.target.closest('[data-svschok]');if(so){so.disabled=true;svSched(so.dataset.svschok);return}
   const se=e.target.closest('[data-spedit]');if(se){const x=SVY.find(y=>y.id===se.dataset.spedit);if(!x)return;SPECED={id:x.id,rows:(x.spec||[]).map(r=>({...r}))};renderSvy();return}
