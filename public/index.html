@@ -1056,7 +1056,9 @@ $('svyView').addEventListener('click',async e=>{
   const del=e.target.closest('[data-svdel]');if(del){const id=del.dataset.svdel;if(del.dataset.confirm!=='1'){del.dataset.confirm='1';del.textContent='再按一次確定';return}
     del.disabled=true;try{await call('api/survey/'+id,'DELETE');SVPEND[id]={v:null,t:Date.now()};SVY=svApply(SVY);render()}catch(err){del.disabled=false;del.textContent='失敗：'+err.message}}});
 $('svyView').addEventListener('submit',async e=>{e.preventDefault();const msg=$('svMsg');const b={...SVF};b.tool=String(b.tool||'').trim().toUpperCase();
-  if(!b.tool){msg.textContent='請輸入機台。';return}const btn=e.target.querySelector('[type=submit]');btn.disabled=true;msg.textContent='儲存中…';
+  if(!b.tool){msg.textContent='請輸入機台。';return}
+  if(!b.id){const ex=svyMatch({tool:b.tool,micap:String(b.micap||'').trim()});if(ex){msg.innerHTML=`已經有 <b>${esc(ex.tool)}</b> 的會勘紀錄，不會重複新增。<button type="button" class="btn small" data-svedit="${esc(ex.id)}">改成修改那筆</button>`;return}}
+  const btn=e.target.querySelector('[type=submit]');btn.disabled=true;msg.textContent='儲存中…';
   try{const body={grp:b.grp,floor:b.floor||'',tool:b.tool,link:String(b.link||'').toUpperCase(),micap:String(b.micap||'').trim(),svy:b.svy,odd:b.odd,on:b.on,onText:b.onText,vendor:b.vendor,gd:b.gd,note:b.note};
     const r=b.id?await call('api/survey/'+b.id,'PATCH',body):await call('api/survey','POST',body);SVPEND[r.item.id]={v:r.item,t:Date.now()};SVY=svApply(SVY);
     const wasEdit=!!b.id;SVF=blankSvy({grp:b.grp});render();const m=$('svMsg');if(m)m.textContent=(wasEdit?'已修改：':'已新增：')+r.item.tool}
