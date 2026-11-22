@@ -1042,7 +1042,11 @@ $('svyView').addEventListener('click',async e=>{
     catch(err){mo.disabled=false;$('tumsMsg').textContent=err.message}return}
   const tk=e.target.closest('[data-tumsok]');if(tk&&TUMS){tk.disabled=true;const ex=svyMatch(TUMS);
     const body={tool:($('tm_tool').value||'').trim()||TUMS.tool||TUMS.micap,micap:TUMS.micap,area:TUMS.area,floor:$('tm_floor').value,spec:TUMS.spec,src:'TUMS：'+TUMS.file,svy:$('tm_svy').value,odd:$('tm_odd').value,grp:$('tm_grp').value};
-    try{const r=ex?await call('api/survey/'+ex.id,'PATCH',body):await call('api/survey','POST',body);SVPEND[r.item.id]={v:r.item,t:Date.now()};SVY=svApply(SVY);SVOPEN.add(r.item.id);TUMS=null;state.svyF='all';renderSvy();
+    // 同一台（同機台名稱或同 MICAP）若有重複的紀錄，規格一起更新
+    const dups=ex?SVY.filter(x=>x.id!==ex.id&&((TUMS.micap&&x.micap===TUMS.micap)||tkey(x.tool)===tkey(body.tool))):[];
+    try{const r=ex?await call('api/survey/'+ex.id,'PATCH',body):await call('api/survey','POST',body);SVPEND[r.item.id]={v:r.item,t:Date.now()};
+      for(const d of dups){try{const rr=await call('api/survey/'+d.id,'PATCH',{tool:body.tool,micap:body.micap,area:body.area,spec:body.spec,src:body.src,floor:body.floor||d.floor});SVPEND[rr.item.id]={v:rr.item,t:Date.now()}}catch(_){}}
+      SVY=svApply(SVY);SVOPEN.add(r.item.id);TUMS=null;state.svyF='all';renderSvy();
       const m=document.querySelector(`[data-svmsg="${CSS.escape(r.item.id)}"]`);if(m)m.textContent=ex?'已更新 Exhaust 規格':'已加入'}
     catch(err){tk.disabled=false;$('tumsMsg').textContent=err.message}return}
   const f=e.target.closest('[data-svf]');if(f){state.svyF=f.dataset.svf;renderSvy();return}
